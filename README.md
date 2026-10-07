@@ -600,6 +600,16 @@ translation checkpoint it depends on. Add
 `--device cpu` to force CPU execution or `--relevance-mode rules` to use only
 transparent relevance rules without the semantic-similarity fallback.
 
+### Patient-dialogue MADRS fine-tuning
+
+The repository also includes a separate experiment for predicting item-level
+MADRS severity from patient speech alone. It builds one symptom-aware input per
+session/item (`SYMPTOM: <item> [SEP] <patient dialogue>`), splits whole patients
+or sessions to prevent leakage, fine-tunes the same MADRS-BERT regressor with
+early stopping and checkpoints, and reports overall and per-item metrics. The
+existing session symptom-scoring pipeline above is unchanged. See
+[`DIALOGUE_MADRS.md`](DIALOGUE_MADRS.md) for the data contract and commands.
+
 ---
 
 ## Theoretical Background
