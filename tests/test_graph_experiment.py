@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -103,6 +104,34 @@ def test_local_mode_rejects_ollama_cloud_model(monkeypatch):
     monkeypatch.setenv("LOCAL_PROFILE_MODEL_ID", "gpt-oss:120b-cloud")
     with pytest.raises(ValueError, match="not allowed in local mode"):
         Models.from_env(mode="local")
+
+
+def test_local_json_completion_requests_ollama_json_mode_and_traces_retry(tmp_path, monkeypatch):
+    requests = []
+
+    def create(**kwargs):
+        requests.append(kwargs)
+        content = "invalid JSON" if len(requests) == 1 else '{"is_process": false, "processes": []}'
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=content),
+                                     finish_reason="stop")],
+            model=kwargs["model"], id=f"call-{len(requests)}",
+            system_fingerprint=None, usage=None,
+        )
+
+    client = CompletionClient(Models.from_env(mode="local"), tmp_path / "trace.jsonl")
+    monkeypatch.setattr(client, "_client", lambda _model: SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))))
+
+    result = client.complete("qwen2.5:7b", "Return JSON only", "Classify this")
+
+    assert result == {"is_process": False, "processes": []}
+    assert len(requests) == 2
+    assert all(request["response_format"] == {"type": "json_object"}
+               for request in requests)
+    trace = [json.loads(line) for line in client.trace_path.read_text().splitlines()]
+    assert [entry["attempt"] for entry in trace] == [1, 2]
+    assert all(entry["finish_reason"] == "stop" for entry in trace)
 
 
 def test_batch_writes_two_linked_sessions_and_resumes(tmp_path, monkeypatch):

@@ -556,8 +556,12 @@ uv run python .\run_graph_experiment.py --model-mode local --output-dir .\data\g
 
 `--check` confirms model names and connectivity. The pilot exercises actual
 inference and may reveal slow loading or invalid JSON on a particular machine;
-inspect `llm_trace.jsonl` in the run folder if it fails. Local results should
-be analyzed as an adaptation, not combined with paper-mode results.
+inspect `llm_trace.jsonl` in the run folder if it fails. Local structured
+calls request Ollama JSON mode; the trace records each response and its
+`finish_reason` to help diagnose malformed or truncated output. After a
+failed pilot, update the code and use a fresh pilot output directory so the
+new trace contains only the new attempt. Local results should be analyzed as
+an adaptation, not combined with paper-mode results.
 
 ### Move the work to a Linux laptop
 

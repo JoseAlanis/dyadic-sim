@@ -105,17 +105,24 @@ class CompletionClient:
     def complete(self, model: str, system: str, user: str, *, temperature: float = 0,
                  max_tokens: int = 3000, json_output: bool = True) -> object:
         for attempt in range(3):
-            response = self._client(model).chat.completions.create(
-                model=model,
-                messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
+            request = {
+                "model": model,
+                "messages": [{"role": "system", "content": system},
+                             {"role": "user", "content": user}],
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+            if json_output and self.models.mode == "local":
+                # Ollama supports JSON mode through its OpenAI-compatible API.
+                request["response_format"] = {"type": "json_object"}
+            response = self._client(model).chat.completions.create(**request)
             content = response.choices[0].message.content or ""
             self.trace_path.parent.mkdir(parents=True, exist_ok=True)
             with self.trace_path.open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps({"model": model, "temperature": temperature,
                                          "system": system, "user": user, "response": content,
+                                         "response_format": request.get("response_format"),
+                                         "finish_reason": response.choices[0].finish_reason,
                                          "response_model": response.model,
                                          "response_id": response.id,
                                          "system_fingerprint": response.system_fingerprint,

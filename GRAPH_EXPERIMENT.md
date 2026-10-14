@@ -74,7 +74,8 @@ stages. Changing the declared design requires a new output directory.
 
 Each condition/run folder contains `source_input.json`, `source_graph.json`,
 `source_graph.svg`, `profiles.json`, and `llm_trace.jsonl` with prompts,
-responses, model IDs, and temperatures. Each profile folder contains its
+responses, model IDs, temperatures, response formats, and finish reasons.
+Local structured calls request Ollama JSON mode. Each profile folder contains its
 profile, a pointer to the existing session transcript, reconstructed graph and
 SVG, reconstructed profile, and `comparison.json`. `summary.csv` indexes
 per-session node and edge recall, profile coverage, symptom recovery, and
