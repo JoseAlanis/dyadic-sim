@@ -34,6 +34,9 @@ class Models:
             qwen = "qwen2.5:72b"
             edge = os.getenv("LOCAL_EDGE_MODEL_ID") or "gpt-oss:20b"
             profile = os.getenv("LOCAL_PROFILE_MODEL_ID") or "gemma3:27b"
+            for model in (edge, profile):
+                if model.endswith(("-cloud", ":cloud")):
+                    raise ValueError(f"Cloud model {model!r} is not allowed in local mode")
             return cls(process=llama, themes=llama, edges=(llama, qwen, edge),
                        profile=profile, judge=profile, mode=mode)
         if mode != "paper":

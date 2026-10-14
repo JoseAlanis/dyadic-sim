@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 import run_graph_experiment as runner
 import simulation.dyad as dyad_mod
 import simulation.session as session_mod
@@ -80,6 +82,12 @@ def test_local_mode_routes_every_model_to_ollama_even_with_cloud_env(tmp_path, m
     client = CompletionClient(models, tmp_path / "trace.jsonl")
     assert {client._provider(model) for model in models.required()} == {"ollama"}
     assert Models.from_env().mode == "paper"
+
+
+def test_local_mode_rejects_ollama_cloud_model(monkeypatch):
+    monkeypatch.setenv("LOCAL_PROFILE_MODEL_ID", "gpt-oss:120b-cloud")
+    with pytest.raises(ValueError, match="not allowed in local mode"):
+        Models.from_env(mode="local")
 
 
 def test_batch_writes_two_linked_sessions_and_resumes(tmp_path, monkeypatch):

@@ -521,8 +521,8 @@ Python dependencies, and results. The largest models need more working memory
 than their file size because context and runtime state also consume memory.
 Local inference has no per-call API charge but may be slow without substantial
 RAM or GPU memory. Model licenses still apply. Tags ending in `-cloud` use
-[Ollama's remote service](https://ollama.com/blog/cloud-models) and are not
-the local models listed here.
+[Ollama's remote service](https://ollama.com/blog/cloud-models) and are
+rejected by local mode.
 
 On the other laptop, open PowerShell in the repository root, install the
 dependencies, and pull the five local models:
