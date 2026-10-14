@@ -8,6 +8,10 @@ A simulation framework for structured conversations between two AI agents in asy
 
 `dyadic-sim` runs and analyses dyadic interactions between LLM-based agents. Each agent receives a set of *priors* (constitutive orientations, not scripts) that define its role, and the simulation tracks how the interaction unfolds over multiple turns.
 
+For the separate graph-first PHQ-9 round-trip study, see
+[Graph-first PHQ-9 experiment](#graph-first-phq-9-experiment) below and
+[GRAPH_EXPERIMENT.md](GRAPH_EXPERIMENT.md) for the design and output schema.
+
 The current focus is on the **therapist-patient dyad** because it offers a particularly well-structured test case:
 
 - The roles are inherently asymmetric (one holds the frame, the other works within it).
@@ -246,6 +250,14 @@ either below will only resolve in a working copy.
 
 ### 1. Install `uv`
 
+Windows PowerShell (skip this if `uv --version` already works):
+
+```powershell
+winget install --id=astral-sh.uv -e
+```
+
+macOS/Linux:
+
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
@@ -287,9 +299,17 @@ DEFAULT_THERAPIST_MODEL=llama3.1
 DEFAULT_PATIENT_MODEL=llama3.1
 ```
 
+The graph-first PHQ-9 experiment has additional model requirements and uses
+different `.env` entries. Follow [its setup steps](#graph-first-phq-9-experiment)
+before running `run_graph_experiment.py`.
+
 ### 4. Install Ollama and pull local models
 
 **Install Ollama:**
+
+On Windows, use the [Ollama Windows installer](https://ollama.com/download/windows).
+On macOS or Linux:
+
 ```bash
 # macOS
 brew install ollama
@@ -383,6 +403,185 @@ Stage 3: genuine alterity — different models in each role (NOT yet run)
 ```bash
 uv run pytest -q          # pythonpath is configured in pyproject.toml
 ```
+
+---
+
+## Graph-first PHQ-9 experiment
+
+This separate pipeline starts with the existing `no_complaint` patient prior,
+optionally adds one PHQ-9 symptom, and generates a psychological graph. It makes
+two synthetic profiles from each graph, runs a ten-turn therapy session for each
+profile, reconstructs a graph and profile from each saved conversation, and
+compares the reconstructions with their sources. The default design covers the
+no-symptom control and each of the nine PHQ-9 symptoms, with five graph attempts
+per condition: 50 graphs and 100 profiles/sessions. The patient dialogue agent
+receives only its generated profile; both dialogue agents use local Mistral-Nemo.
+
+| Pipeline stage | Model and access |
+|---|---|
+| Graph processes and themes | Llama 3.1 70B Instruct, through an OpenAI-compatible endpoint |
+| Graph edge votes | Llama 3.1 70B Instruct, Qwen 2.5 72B Instruct, and GPT-4o-mini |
+| Profile generation, review, reconstruction, and comparison | GPT-4o |
+| Therapist and patient conversation | `mistral-nemo` in local Ollama |
+
+This is the default `--model-mode paper`. The graph script does not read
+the dialogue role assignments in `config/models.yaml`. The steps below use
+[OpenRouter's OpenAI-compatible endpoint](https://openrouter.ai/docs/community/frameworks)
+for the two large open models. OpenRouter currently lists the required
+[Llama model](https://openrouter.ai/meta-llama/llama-3.1-70b-instruct) and
+[Qwen model](https://openrouter.ai/qwen/qwen-2.5-72b-instruct).
+You can use another endpoint that serves those models by changing its URL, key,
+and model IDs in `.env`.
+
+### Get access and configure it on Windows
+
+1. Create an [OpenAI API key](https://platform.openai.com/api-keys) for GPT-4o
+   and GPT-4o-mini, and an [OpenRouter API key](https://openrouter.ai/settings/keys)
+   for Llama and Qwen. These are separate services; check their available credit
+   before running the full experiment. Keep both keys out of chat and source control.
+2. From the repository root in PowerShell, install dependencies and open the
+   local configuration file. The copy command preserves an existing `.env`:
+
+   ```powershell
+   uv sync
+   if (-not (Test-Path .\.env)) { Copy-Item .\env.example .\.env }
+   notepad .\.env
+   ```
+
+3. Set these entries in `.env`, replacing only the two key placeholders with
+   your own secret values. Leave any unrelated entries in the file as they are:
+
+   ```dotenv
+   OPENAI_API_KEY=<your OpenAI API key>
+   GRAPH_MODEL_BASE_URL=https://openrouter.ai/api/v1
+   GRAPH_MODEL_API_KEY=<your OpenRouter API key>
+   PAPER_LLAMA_MODEL_ID=meta-llama/llama-3.1-70b-instruct
+   PAPER_QWEN_MODEL_ID=qwen/qwen-2.5-72b-instruct
+   OLLAMA_BASE_URL=http://localhost:11434
+   ```
+
+4. Make sure Ollama is running and `mistral-nemo` appears in `ollama list`.
+   If it is absent, run `ollama pull mistral-nemo`. Then check model access:
+
+   ```powershell
+   ollama list
+   uv run python .\run_graph_experiment.py --check
+   ```
+
+   A successful check prints `All required paper models are available.`
+   This checks model IDs and connectivity; the pilot below also
+   verifies that the services can actually complete requests. If Ollama is not
+   reachable, start its Windows app or run `ollama serve` in another PowerShell
+   window. A 401 usually means a wrong API key; a 429 usually means a limit or
+   insufficient credit.
+
+5. Run one no-symptom graph attempt and its two sessions as a pilot:
+
+   ```powershell
+   uv run python .\run_graph_experiment.py --conditions no_symptoms --repeats 1 --output-dir .\data\graph_experiments\pilot_access
+   ```
+
+6. Once the pilot completes, run the full design:
+
+   ```powershell
+   uv run python .\run_graph_experiment.py
+   ```
+
+The pilot needs its own output directory because each directory stores a
+manifest for one design. The full run writes to
+`data/graph_experiments/no_complaint_phq9_graph_v1/`. Rerunning the same command
+resumes incomplete work. Read `summary.csv` for comparisons; each condition and
+run folder holds its source graph (`.json` and `.svg`), generated profiles, and
+`llm_trace.jsonl` with the actual prompts and responses. Each profile folder has
+the reconstructed graph/profile, comparison, and `session.json` pointing to the
+transcript under `data/sessions/`. Prompt templates are in
+[`graph_experiment/prompts.py`](graph_experiment/prompts.py). See
+[GRAPH_EXPERIMENT.md](GRAPH_EXPERIMENT.md) for the full file layout and
+methodological limits.
+
+### Run without paid model APIs on another laptop
+
+Use `--model-mode local` for a **separate adaptation** of the papers' model
+pipeline. All graph and profile calls then go to local Ollama, even if
+`GRAPH_MODEL_BASE_URL` and `OPENAI_API_KEY` are set in `.env`. It uses the same
+prompts, graph construction, profiles, Mistral-Nemo dialogue, and reverse
+comparison as paper mode. Its two model substitutions are recorded in the run
+manifest and per-call trace:
+
+| Stage | Local Ollama model | Approximate download |
+|---|---|---:|
+| Process/theme construction and first edge vote | [`llama3.1:70b`](https://ollama.com/library/llama3.1) | 43 GB |
+| Second edge vote | [`qwen2.5:72b`](https://ollama.com/library/qwen2.5) | 47 GB |
+| Third edge vote, replacing GPT-4o-mini | [`gpt-oss:20b`](https://ollama.com/library/gpt-oss) | 14 GB |
+| Profile work and comparison, replacing GPT-4o | [`gemma3:27b`](https://ollama.com/library/gemma3) | 17 GB |
+| Therapist and patient | [`mistral-nemo`](https://ollama.com/library/mistral-nemo) | 7.1 GB |
+
+Model downloads total roughly 128 GB; leave additional space for Ollama,
+Python dependencies, and results. The largest models need more working memory
+than their file size because context and runtime state also consume memory.
+Local inference has no per-call API charge but may be slow without substantial
+RAM or GPU memory. Model licenses still apply. Tags ending in `-cloud` use
+[Ollama's remote service](https://ollama.com/blog/cloud-models) and are not
+the local models listed here.
+
+On the other laptop, open PowerShell in the repository root, install the
+dependencies, and pull the five local models:
+
+```powershell
+uv sync
+if (-not (Test-Path .\.env)) { Copy-Item .\env.example .\.env }
+ollama pull llama3.1:70b
+ollama pull qwen2.5:72b
+ollama pull gpt-oss:20b
+ollama pull gemma3:27b
+ollama pull mistral-nemo
+uv run python .\run_graph_experiment.py --model-mode local --check
+```
+
+If the laptop can run the larger [`gpt-oss:120b`](https://ollama.com/library/gpt-oss)
+(about 65 GB), pull it and set `LOCAL_PROFILE_MODEL_ID=gpt-oss:120b` in `.env`
+**before starting a run**. The default is `gemma3:27b`. The third edge voter
+defaults to `gpt-oss:20b` and can be changed with `LOCAL_EDGE_MODEL_ID`.
+Changing either model requires a fresh output directory so the designs do not
+mix.
+
+Run a small local pilot, inspect its graphs, profiles, and comparison, then run
+the full local design in its own directory:
+
+```powershell
+uv run python .\run_graph_experiment.py --model-mode local --conditions no_symptoms --repeats 1 --output-dir .\data\graph_experiments\pilot_local
+uv run python .\run_graph_experiment.py --model-mode local --output-dir .\data\graph_experiments\no_complaint_phq9_local_v1
+```
+
+`--check` confirms model names and connectivity. The pilot exercises actual
+inference and may reveal slow loading or invalid JSON on a particular machine;
+inspect `llm_trace.jsonl` in the run folder if it fails. Local results should
+be analyzed as an adaptation, not combined with paper-mode results.
+
+### Move the work to another laptop
+
+The Git branch for this work is `feature/graph-based-patient-profile`. On the
+other laptop, install Git, Ollama, and `uv`, then clone and select that branch:
+
+```powershell
+git clone https://github.com/justfarbod/dyadic-sim.git
+cd .\dyadic-sim
+git switch feature/graph-based-patient-profile
+```
+
+Open the cloned folder as a project in Codex. Start a chat there with:
+
+> Continue the graph-first PHQ-9 experiment on this laptop. Read README.md and
+> GRAPH_EXPERIMENT.md first. Use `--model-mode local`; check Ollama model access,
+> run one pilot, inspect the saved outputs, then continue the full run. Preserve
+> the model IDs and output directories in each run's manifest.
+
+Git does not carry `.env`, installed Ollama models, `.venv`, or `data/` because
+they are ignored. Recreate `.env` from `env.example` and pull the models on
+the new laptop. If you later need to move partially completed sessions or
+results, copy `data/` separately; the `session.json` pointers contain absolute
+paths and need to be checked after moving machines. The repository's code,
+prompts, and these instructions do travel with Git.
 
 ---
 

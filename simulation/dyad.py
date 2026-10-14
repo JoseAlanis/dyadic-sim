@@ -30,10 +30,11 @@ class Dyad:
         orientation: str = "psychodynamic",
         session_id: str | None = None,
         patient_id: str | None = None,
+        patient_prior: PatientPrior | None = None,
     ):
         # Build priors
         self.therapist_prior: TherapistPrior = build_therapist_prior(orientation)
-        self.patient_prior: PatientPrior = build_patient_prior(case_name)
+        self.patient_prior: PatientPrior = patient_prior or build_patient_prior(case_name)
 
         # Build agents
         self.therapist_agent: BaseAgent = build_agent(therapist_model, "therapist")
