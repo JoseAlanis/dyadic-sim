@@ -25,12 +25,15 @@ Two-profile output and fidelity to `no_complaint` are study-specific adaptations
 The construction models are Llama-3.1-70B for process and theme stages, then
 Llama-3.1-70B, Qwen-2.5-72B, and GPT-4o-mini with majority voting for links.
 GPT-4o creates and reviews profiles and compares round trips. These are the
-papers' model choices in `--model-mode paper`. An explicitly requested
-`--model-mode local` keeps the Llama, Qwen, and Mistral-Nemo stages, replacing
-GPT-4o-mini with `gpt-oss:20b` and GPT-4o with `gemma3:27b` by default.
-`LOCAL_EDGE_MODEL_ID` and `LOCAL_PROFILE_MODEL_ID` can select other local
-Ollama models such as `gpt-oss:120b` for the profile stage. The local variant
-must be analyzed separately from a paper-model run. Graph2Counsel's
+papers' model choices in `--model-mode paper`. In `--model-mode local`,
+`qwen2.5:7b` extracts processes and themes, reviews profiles, and compares
+round trips; `qwen2.5:14b` makes one directed edge decision per theme pair;
+`mistral-nemo` generates and reconstructs profiles and runs both dialogue
+roles. Local mode uses one edge decision rather than the paper mode's
+three-model majority vote. It is a lighter methodological adaptation and
+must be analyzed separately from a paper-model run. Its model IDs are
+configurable through the four `LOCAL_*_MODEL_ID` entries in `env.example`.
+Graph2Counsel's
 one-shot dialogue generator is replaced by this repository's alternating
 Mistral-Nemo dyad, as required by the experiment.
 
@@ -56,9 +59,11 @@ For a fully local run after pulling the models listed in the
 
 ```powershell
 uv run python .\run_graph_experiment.py --model-mode local --check
-uv run python .\run_graph_experiment.py --model-mode local --conditions no_symptoms --repeats 1 --output-dir .\data\graph_experiments\pilot_local
-uv run python .\run_graph_experiment.py --model-mode local --output-dir .\data\graph_experiments\no_complaint_phq9_local_v1
+uv run python .\run_graph_experiment.py --model-mode local --conditions no_symptoms --repeats 1 --output-dir .\data\graph_experiments\pilot_qwen_nemo_v1
+uv run python .\run_graph_experiment.py --model-mode local --output-dir .\data\graph_experiments\no_complaint_phq9_qwen_nemo_v1
 ```
+
+On Linux, use the [Linux setup and Bash commands](README.md#move-the-work-to-a-linux-laptop).
 
 The preflight checks all required model IDs before creating any run artifacts.
 Run the pilot in its own directory: a design manifest prevents reusing that

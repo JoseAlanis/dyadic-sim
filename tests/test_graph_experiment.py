@@ -54,6 +54,17 @@ def test_graph_uses_directional_majority_vote():
     assert len(graph["edges"][0]["votes"]) == 3
 
 
+def test_single_local_edge_decision_can_create_edge():
+    client = FakeClient()
+    client.models.edges = ("qwen2.5:14b",)
+    graph = construct_graph(client,
+                            [{"source": "prior", "text": "I plan carefully."},
+                             {"source": "phq9", "text": "Sleep trouble nearly every day."}],
+                            "context", source_kind="prior_plus_phq9")
+    assert graph["edges"]
+    assert all(len(edge["votes"]) == 1 for edge in graph["edges"])
+
+
 def test_profile_prompt_does_not_include_original_case_or_symptom():
     prior = PatientPrior(case_name="no_complaint",
                          presenting_complaint="SOURCE PRIOR SENTINEL",
@@ -75,10 +86,14 @@ def test_default_design_contains_control_and_all_nine_symptoms():
 def test_local_mode_routes_every_model_to_ollama_even_with_cloud_env(tmp_path, monkeypatch):
     monkeypatch.setenv("GRAPH_MODEL_BASE_URL", "https://openrouter.ai/api/v1")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.setenv("LOCAL_PROFILE_MODEL_ID", "gpt-oss:120b")
+    for key in ("LOCAL_PROCESS_MODEL_ID", "LOCAL_EDGE_MODEL_ID",
+                "LOCAL_PROFILE_MODEL_ID", "LOCAL_JUDGE_MODEL_ID"):
+        monkeypatch.delenv(key, raising=False)
     models = Models.from_env(mode="local")
-    assert models.edges == ("llama3.1:70b", "qwen2.5:72b", "gpt-oss:20b")
-    assert models.profile == models.judge == "gpt-oss:120b"
+    assert models.process == models.themes == "qwen2.5:7b"
+    assert models.edges == ("qwen2.5:14b",)
+    assert models.profile == models.dialogue == "mistral-nemo"
+    assert models.judge == "qwen2.5:7b"
     client = CompletionClient(models, tmp_path / "trace.jsonl")
     assert {client._provider(model) for model in models.required()} == {"ollama"}
     assert Models.from_env().mode == "paper"

@@ -19,7 +19,7 @@ class Models:
     # Paper 1: local Llama for stages 1/2 and a three-model stage-3 ensemble.
     process: str = "llama3.1:70b"
     themes: str = "llama3.1:70b"
-    edges: tuple[str, str, str] = ("llama3.1:70b", "qwen2.5:72b", "gpt-4o-mini")
+    edges: tuple[str, ...] = ("llama3.1:70b", "qwen2.5:72b", "gpt-4o-mini")
     # Graph2Counsel uses GPT-4o for profile generation and evaluation.
     profile: str = "gpt-4o"
     judge: str = "gpt-4o"
@@ -30,15 +30,15 @@ class Models:
     def from_env(cls, mode: str = "paper") -> Models:
         """Select the paper models or an explicitly labeled local adaptation."""
         if mode == "local":
-            llama = "llama3.1:70b"
-            qwen = "qwen2.5:72b"
-            edge = os.getenv("LOCAL_EDGE_MODEL_ID") or "gpt-oss:20b"
-            profile = os.getenv("LOCAL_PROFILE_MODEL_ID") or "gemma3:27b"
-            for model in (edge, profile):
+            process = os.getenv("LOCAL_PROCESS_MODEL_ID") or "qwen2.5:7b"
+            edge = os.getenv("LOCAL_EDGE_MODEL_ID") or "qwen2.5:14b"
+            profile = os.getenv("LOCAL_PROFILE_MODEL_ID") or "mistral-nemo"
+            judge = os.getenv("LOCAL_JUDGE_MODEL_ID") or "qwen2.5:7b"
+            for model in (process, edge, profile, judge):
                 if model.endswith(("-cloud", ":cloud")):
                     raise ValueError(f"Cloud model {model!r} is not allowed in local mode")
-            return cls(process=llama, themes=llama, edges=(llama, qwen, edge),
-                       profile=profile, judge=profile, mode=mode)
+            return cls(process=process, themes=process, edges=(edge,),
+                       profile=profile, judge=judge, mode=mode)
         if mode != "paper":
             raise ValueError(f"Unknown graph model mode: {mode}")
         llama = os.getenv("PAPER_LLAMA_MODEL_ID", "llama3.1:70b")

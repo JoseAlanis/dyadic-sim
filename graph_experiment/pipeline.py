@@ -135,7 +135,7 @@ def construct_graph(client: CompletionClient, units: list[dict], context: str,
             positive = [v for v in votes if str(v.get("connection")) == "1"
                         and v.get("type") in {"excitatory", "inhibitory"}]
             types = Counter(v["type"] for v in positive)
-            if types and types.most_common(1)[0][1] >= 2:
+            if types and types.most_common(1)[0][1] >= len(client.models.edges) // 2 + 1:
                 relation = types.most_common(1)[0][0]
                 agreeing = [v for v in positive if v["type"] == relation]
                 strongest = max(agreeing, key=lambda v: STRENGTH.get(v.get("strength"), 0))
@@ -240,7 +240,7 @@ def compare_round_trip(client: CompletionClient, source_graph: dict,
 
 
 def comparison_view(graph: dict) -> dict:
-    """Keep judge input focused on topology rather than three raw model votes."""
+    """Keep judge input focused on topology rather than raw edge votes."""
     return {
         "nodes": [{"id": n["id"], "theme": n["theme"]} for n in graph["nodes"]],
         "edges": [{"id": e["id"], "source": e["source"], "target": e["target"],

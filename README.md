@@ -501,57 +501,57 @@ methodological limits.
 
 ### Run without paid model APIs on another laptop
 
-Use `--model-mode local` for a **separate adaptation** of the papers' model
-pipeline. All graph and profile calls then go to local Ollama, even if
-`GRAPH_MODEL_BASE_URL` and `OPENAI_API_KEY` are set in `.env`. It uses the same
-prompts, graph construction, profiles, Mistral-Nemo dialogue, and reverse
-comparison as paper mode. Its two model substitutions are recorded in the run
-manifest and per-call trace:
+Use `--model-mode local` for a **lighter adaptation** of the papers' model
+pipeline. All graph and profile calls go to local Ollama, even if
+`GRAPH_MODEL_BASE_URL` and `OPENAI_API_KEY` are set in `.env`. It keeps the same
+prompts, graph/profile stages, Mistral-Nemo dialogue, and reverse comparison.
+Its model choices are recorded in the run manifest and per-call trace:
 
 | Stage | Local Ollama model | Approximate download |
 |---|---|---:|
-| Process/theme construction and first edge vote | [`llama3.1:70b`](https://ollama.com/library/llama3.1) | 43 GB |
-| Second edge vote | [`qwen2.5:72b`](https://ollama.com/library/qwen2.5) | 47 GB |
-| Third edge vote, replacing GPT-4o-mini | [`gpt-oss:20b`](https://ollama.com/library/gpt-oss) | 14 GB |
-| Profile work and comparison, replacing GPT-4o | [`gemma3:27b`](https://ollama.com/library/gemma3) | 17 GB |
-| Therapist and patient | [`mistral-nemo`](https://ollama.com/library/mistral-nemo) | 7.1 GB |
+| Process/theme construction, profile review, and graph/profile comparison | [`qwen2.5:7b`](https://ollama.com/library/qwen2.5) | 4.7 GB |
+| Directed edge decisions | [`qwen2.5:14b`](https://ollama.com/library/qwen2.5) | 9 GB |
+| Forward/reconstructed profiles and therapist/patient dialogue | [`mistral-nemo`](https://ollama.com/library/mistral-nemo) | 7.1 GB |
 
-Model downloads total roughly 128 GB; leave additional space for Ollama,
-Python dependencies, and results. The largest models need more working memory
-than their file size because context and runtime state also consume memory.
-Local inference has no per-call API charge but may be slow without substantial
-RAM or GPU memory. Model licenses still apply. Tags ending in `-cloud` use
+The three unique model downloads total about 21 GB; leave additional space for
+Ollama, Python dependencies, and results. Runtime memory also depends on
+context size and model switching. Local inference has no per-call API charge,
+but may be slow if models do not fit in available RAM or GPU memory. Model
+licenses still apply. Tags ending in `-cloud` use
 [Ollama's remote service](https://ollama.com/blog/cloud-models) and are
 rejected by local mode.
 
+Paper mode retains its three-model majority vote for each directed edge. Local
+mode makes **one** edge decision with `qwen2.5:14b`; three deterministic calls
+to the same model would not provide three independent votes. This is a
+methodological change, so analyze local results separately from paper-mode
+results. The local model IDs can be adjusted with `LOCAL_PROCESS_MODEL_ID`,
+`LOCAL_EDGE_MODEL_ID`, `LOCAL_PROFILE_MODEL_ID`, and `LOCAL_JUDGE_MODEL_ID` in
+`.env`. Use a fresh output directory whenever a model changes.
+
 On Windows, open PowerShell in the repository root, install the dependencies,
-and pull the five local models. For Linux, follow the complete setup under
+and pull the three local models. For Linux, follow the complete setup under
 [Move the work to a Linux laptop](#move-the-work-to-a-linux-laptop) below.
 
 ```powershell
 uv sync
 if (-not (Test-Path .\.env)) { Copy-Item .\env.example .\.env }
-ollama pull llama3.1:70b
-ollama pull qwen2.5:72b
-ollama pull gpt-oss:20b
-ollama pull gemma3:27b
+ollama pull qwen2.5:7b
+ollama pull qwen2.5:14b
 ollama pull mistral-nemo
 uv run python .\run_graph_experiment.py --model-mode local --check
 ```
 
-If the laptop can run the larger [`gpt-oss:120b`](https://ollama.com/library/gpt-oss)
-(about 65 GB), pull it and set `LOCAL_PROFILE_MODEL_ID=gpt-oss:120b` in `.env`
-**before starting a run**. The default is `gemma3:27b`. The third edge voter
-defaults to `gpt-oss:20b` and can be changed with `LOCAL_EDGE_MODEL_ID`.
-Changing either model requires a fresh output directory so the designs do not
-mix.
+If you copied `env.example` before this model change, update its four
+`LOCAL_*_MODEL_ID` entries to the values in the current `env.example` before
+running the check. An old `.env` overrides the new code defaults.
 
 On Windows, run a small local pilot, inspect its graphs, profiles, and
 comparison, then run the full local design in its own directory:
 
 ```powershell
-uv run python .\run_graph_experiment.py --model-mode local --conditions no_symptoms --repeats 1 --output-dir .\data\graph_experiments\pilot_local
-uv run python .\run_graph_experiment.py --model-mode local --output-dir .\data\graph_experiments\no_complaint_phq9_local_v1
+uv run python .\run_graph_experiment.py --model-mode local --conditions no_symptoms --repeats 1 --output-dir .\data\graph_experiments\pilot_qwen_nemo_v1
+uv run python .\run_graph_experiment.py --model-mode local --output-dir .\data\graph_experiments\no_complaint_phq9_qwen_nemo_v1
 ```
 
 `--check` confirms model names and connectivity. The pilot exercises actual
@@ -601,14 +601,14 @@ the remaining commands are the same. The Git branch for this work is
    authentication during the clone. Keep any keys you later add to `.env`
    out of Git.
 
-3. Download the five Ollama models and check that every required model is
-   reachable. Downloads total about 128 GB:
+3. Download the three Ollama models and check that every required model is
+   reachable. Downloads total about 21 GB. If you already have a `.env` from
+   the previous setup, change its four `LOCAL_*_MODEL_ID` entries to match
+   `env.example`:
 
    ```bash
-   ollama pull llama3.1:70b
-   ollama pull qwen2.5:72b
-   ollama pull gpt-oss:20b
-   ollama pull gemma3:27b
+   ollama pull qwen2.5:7b
+   ollama pull qwen2.5:14b
    ollama pull mistral-nemo
    ollama list
    uv run python run_graph_experiment.py --model-mode local --check
@@ -617,7 +617,7 @@ the remaining commands are the same. The Git branch for this work is
 4. Run a one-graph pilot in its own directory:
 
    ```bash
-   uv run python run_graph_experiment.py --model-mode local --conditions no_symptoms --repeats 1 --output-dir data/graph_experiments/pilot_local
+   uv run python run_graph_experiment.py --model-mode local --conditions no_symptoms --repeats 1 --output-dir data/graph_experiments/pilot_qwen_nemo_v1
    ```
 
    Inspect the pilot's graph, profiles, `summary.csv`, transcripts, and
@@ -625,13 +625,12 @@ the remaining commands are the same. The Git branch for this work is
    directory:
 
    ```bash
-   uv run python run_graph_experiment.py --model-mode local --output-dir data/graph_experiments/no_complaint_phq9_local_v1
+   uv run python run_graph_experiment.py --model-mode local --output-dir data/graph_experiments/no_complaint_phq9_qwen_nemo_v1
    ```
 
-   Rerunning the same full command resumes incomplete work. To use
-   `gpt-oss:120b` for profile work, run `ollama pull gpt-oss:120b` and set
-   `LOCAL_PROFILE_MODEL_ID=gpt-oss:120b` in `.env` **before** starting a fresh
-   output directory.
+   Rerunning the same full command resumes incomplete work. If that output
+   directory contains an earlier run with different models, choose a new
+   directory; the manifest will reject mixing designs.
 
 5. To continue with Codex on Linux, install the
    [Codex CLI](https://learn.chatgpt.com/docs/codex/cli), run it from the
