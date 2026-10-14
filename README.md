@@ -524,8 +524,9 @@ RAM or GPU memory. Model licenses still apply. Tags ending in `-cloud` use
 [Ollama's remote service](https://ollama.com/blog/cloud-models) and are
 rejected by local mode.
 
-On the other laptop, open PowerShell in the repository root, install the
-dependencies, and pull the five local models:
+On Windows, open PowerShell in the repository root, install the dependencies,
+and pull the five local models. For Linux, follow the complete setup under
+[Move the work to a Linux laptop](#move-the-work-to-a-linux-laptop) below.
 
 ```powershell
 uv sync
@@ -545,8 +546,8 @@ defaults to `gpt-oss:20b` and can be changed with `LOCAL_EDGE_MODEL_ID`.
 Changing either model requires a fresh output directory so the designs do not
 mix.
 
-Run a small local pilot, inspect its graphs, profiles, and comparison, then run
-the full local design in its own directory:
+On Windows, run a small local pilot, inspect its graphs, profiles, and
+comparison, then run the full local design in its own directory:
 
 ```powershell
 uv run python .\run_graph_experiment.py --model-mode local --conditions no_symptoms --repeats 1 --output-dir .\data\graph_experiments\pilot_local
@@ -558,26 +559,99 @@ inference and may reveal slow loading or invalid JSON on a particular machine;
 inspect `llm_trace.jsonl` in the run folder if it fails. Local results should
 be analyzed as an adaptation, not combined with paper-mode results.
 
-### Move the work to another laptop
+### Move the work to a Linux laptop
 
-The Git branch for this work is `feature/graph-based-patient-profile`. On the
-other laptop, install Git, Ollama, and `uv`, then clone and select that branch:
+These terminal commands assume Ubuntu or Debian with `systemd`. On Fedora or
+Arch, install `git` and `curl` with the distribution's package manager first;
+the remaining commands are the same. The Git branch for this work is
+`feature/graph-based-patient-profile`.
 
-```powershell
-git clone https://github.com/justfarbod/dyadic-sim.git
-cd .\dyadic-sim
-git switch feature/graph-based-patient-profile
-```
+1. Install basic tools, [uv](https://docs.astral.sh/uv/getting-started/installation/),
+   and [Ollama](https://docs.ollama.com/linux). The Ollama installer normally
+   creates a service; start it and check the installed versions:
 
-Install the [ChatGPT desktop app](https://learn.chatgpt.com/docs/quickstart)
-on the other laptop and sign in with the same account. In the app, choose
-**Codex**, open the cloned `dyadic-sim` folder as a local project, and start
-a new chat there with:
+   ```bash
+   sudo apt update
+   sudo apt install -y git curl ca-certificates
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   export PATH="$HOME/.local/bin:$PATH"
+   curl -fsSL https://ollama.com/install.sh | sh
+   sudo systemctl enable --now ollama
+   ollama --version
+   uv --version
+   ```
 
-> Continue the graph-first PHQ-9 experiment on this laptop. Read README.md and
-> GRAPH_EXPERIMENT.md first. Use `--model-mode local`; check Ollama model access,
-> run one pilot, inspect the saved outputs, then continue the full run. Preserve
-> the model IDs and output directories in each run's manifest.
+   If your Linux installation has no `systemd`, run `ollama serve` in a
+   separate terminal instead of the `systemctl` command.
+
+2. Clone the branch, install Python dependencies, and make a local `.env`.
+   `uv sync` installs the project's compatible Python version if needed.
+   Local mode does **not** need OpenAI or OpenRouter API keys:
+
+   ```bash
+   mkdir -p ~/code
+   cd ~/code
+   git clone --branch feature/graph-based-patient-profile https://github.com/justfarbod/dyadic-sim.git
+   cd dyadic-sim
+   uv sync
+   cp env.example .env
+   ```
+
+   If the repository is private, GitHub will require your normal Git
+   authentication during the clone. Keep any keys you later add to `.env`
+   out of Git.
+
+3. Download the five Ollama models and check that every required model is
+   reachable. Downloads total about 128 GB:
+
+   ```bash
+   ollama pull llama3.1:70b
+   ollama pull qwen2.5:72b
+   ollama pull gpt-oss:20b
+   ollama pull gemma3:27b
+   ollama pull mistral-nemo
+   ollama list
+   uv run python run_graph_experiment.py --model-mode local --check
+   ```
+
+4. Run a one-graph pilot in its own directory:
+
+   ```bash
+   uv run python run_graph_experiment.py --model-mode local --conditions no_symptoms --repeats 1 --output-dir data/graph_experiments/pilot_local
+   ```
+
+   Inspect the pilot's graph, profiles, `summary.csv`, transcripts, and
+   `llm_trace.jsonl`. If they look right, run the full design in a separate
+   directory:
+
+   ```bash
+   uv run python run_graph_experiment.py --model-mode local --output-dir data/graph_experiments/no_complaint_phq9_local_v1
+   ```
+
+   Rerunning the same full command resumes incomplete work. To use
+   `gpt-oss:120b` for profile work, run `ollama pull gpt-oss:120b` and set
+   `LOCAL_PROFILE_MODEL_ID=gpt-oss:120b` in `.env` **before** starting a fresh
+   output directory.
+
+5. To continue with Codex on Linux, install the
+   [Codex CLI](https://learn.chatgpt.com/docs/codex/cli), run it from the
+   repository, and sign in when prompted:
+
+   ```bash
+   curl -fsSL https://chatgpt.com/codex/install.sh | sh
+   cd ~/code/dyadic-sim
+   codex
+   ```
+
+   If you prefer the desktop app, follow the
+   [Linux desktop installation guide](https://learn.chatgpt.com/docs/linux/linux-app)
+   for your distribution, sign in, choose **Codex**, and open the cloned
+   `dyadic-sim` folder. In either interface, start with:
+
+   > Continue the graph-first PHQ-9 experiment on this laptop. Read README.md and
+   > GRAPH_EXPERIMENT.md first. Use `--model-mode local`; check Ollama model access,
+   > run one pilot, inspect the saved outputs, then continue the full run. Preserve
+   > the model IDs and output directories in each run's manifest.
 
 Git does not carry `.env`, installed Ollama models, `.venv`, or `data/` because
 they are ignored. Recreate `.env` from `env.example` and pull the models on
