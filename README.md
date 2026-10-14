@@ -569,7 +569,10 @@ cd .\dyadic-sim
 git switch feature/graph-based-patient-profile
 ```
 
-Open the cloned folder as a project in Codex. Start a chat there with:
+Install the [ChatGPT desktop app](https://learn.chatgpt.com/docs/quickstart)
+on the other laptop and sign in with the same account. In the app, choose
+**Codex**, open the cloned `dyadic-sim` folder as a local project, and start
+a new chat there with:
 
 > Continue the graph-first PHQ-9 experiment on this laptop. Read README.md and
 > GRAPH_EXPERIMENT.md first. Use `--model-mode local`; check Ollama model access,
