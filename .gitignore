@@ -29,6 +29,10 @@ __pycache__/
 # regenerable.
 data/*
 manuscript/
+result/
+requested_20260908_no_complaint_new_280 (2)/
+requested_20260908_no_complaint_new_280.zip
+requested_20260908_no_complaint_new_280/
 
 
 # streamlit

@@ -14,6 +14,26 @@ from openai import OpenAI
 load_dotenv()
 
 
+def _parse_json_response(content: str) -> object:
+    """Parse JSON while tolerating small local-model suffix artifacts."""
+    stripped = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip(),
+                      flags=re.IGNORECASE)
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError as original_error:
+        # Some local models append a quote or a literal ``\n`` after an otherwise
+        # complete JSON value. Accept only those harmless suffixes; additional
+        # prose or a second JSON value remains an error and gets retried.
+        try:
+            value, end = json.JSONDecoder().raw_decode(stripped)
+        except json.JSONDecodeError:
+            raise original_error
+        suffix = stripped[end:].strip()
+        if suffix and re.fullmatch(r"(?:'|\\[rnt])+", suffix):
+            return value
+        raise original_error
+
+
 @dataclass(frozen=True)
 class Models:
     # Paper 1: local Llama for stages 1/2 and a three-model stage-3 ensemble.
@@ -112,8 +132,7 @@ class CompletionClient:
                 "temperature": temperature,
                 "max_tokens": max_tokens,
             }
-            if json_output and self.models.mode == "local":
-                # Ollama supports JSON mode through its OpenAI-compatible API.
+            if json_output and self._provider(model) == "ollama":
                 request["response_format"] = {"type": "json_object"}
             response = self._client(model).chat.completions.create(**request)
             content = response.choices[0].message.content or ""
@@ -121,8 +140,6 @@ class CompletionClient:
             with self.trace_path.open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps({"model": model, "temperature": temperature,
                                          "system": system, "user": user, "response": content,
-                                         "response_format": request.get("response_format"),
-                                         "finish_reason": response.choices[0].finish_reason,
                                          "response_model": response.model,
                                          "response_id": response.id,
                                          "system_fingerprint": response.system_fingerprint,
@@ -131,8 +148,7 @@ class CompletionClient:
             if not json_output:
                 return content
             try:
-                stripped = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip(), flags=re.IGNORECASE)
-                return json.loads(stripped)
+                return _parse_json_response(content)
             except json.JSONDecodeError:
                 user += "\nReturn valid JSON only, with no markdown fence."
         raise ValueError(f"{model} did not produce valid JSON after three attempts; see {self.trace_path}")

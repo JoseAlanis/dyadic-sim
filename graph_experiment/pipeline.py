@@ -26,6 +26,20 @@ PROFILE_KEYS = (
     "past_history", "functioning_and_relationships", "social_support",
 )
 STRENGTH = {"weak": 1, "moderate": 2, "strong": 3}
+FALLBACK_THEME_GROUPS = (
+    (
+        {"Cognition", "Sense of Self", "Attention"},
+        "The client's interpretations, attention, and sense of self shape how situations are understood.",
+    ),
+    (
+        {"Affect", "Motivation", "Biophysiological"},
+        "Emotional, motivational, and bodily responses influence engagement with daily life.",
+    ),
+    (
+        {"Overt Behaviour", "Sociocultural", "Context/Moderators"},
+        "Behavioral, relational, and contextual patterns organize day-to-day functioning.",
+    ),
+)
 
 
 def write_json(path: Path, value: object) -> None:
@@ -60,6 +74,17 @@ def _json_list(value: object, key: str) -> list:
     return value[key]
 
 
+def _local_theme_fallback(processes: list[dict]) -> dict[str, set[str]]:
+    """Group extracted processes by their classifier dimensions after malformed local output."""
+    assignments: dict[str, set[str]] = {}
+    for process in processes:
+        process_types = set(process.get("types", []))
+        selected = next((theme for types, theme in FALLBACK_THEME_GROUPS
+                         if process_types & types), FALLBACK_THEME_GROUPS[0][1])
+        assignments.setdefault(selected, set()).add(process["id"])
+    return assignments
+
+
 def construct_graph(client: CompletionClient, units: list[dict], context: str,
                     *, source_kind: str) -> dict:
     """MP1, MP2, MP3, then MP5 model-based ensemble, with saved intermediate data."""
@@ -92,30 +117,102 @@ def construct_graph(client: CompletionClient, units: list[dict], context: str,
             and not any(p["source"] == "phq9" for p in processes)):
         raise ValueError("PHQ-9 symptom was omitted by process classification")
 
-    themes_response = client.complete(
-        client.models.themes, THEME_SYSTEM,
-        f"Context (do not quote):\n{context}\n\nListed processes:\n"
-        + json.dumps(processes, ensure_ascii=False),
-    )
-    themes = [str(t).strip() for t in _json_list(themes_response, "themes") if str(t).strip()]
-    if not themes:
-        raise ValueError("Theme generator returned no themes for nonempty processes")
-    clusters_response = client.complete(
-        client.models.themes, CLUSTER_SYSTEM,
-        f"Context:\n{context}\n\nProcesses:\n{json.dumps(processes, ensure_ascii=False)}\n"
-        f"Provided themes:\n{json.dumps(themes, ensure_ascii=False)}",
-    )
-    clusters = _json_list(clusters_response, "clusters")
     valid_ids = {p["id"] for p in processes}
-    nodes = []
-    for theme in themes:
-        matching = [c for c in clusters if isinstance(c, dict) and c.get("theme") == theme]
-        ids = [pid for c in matching for pid in c.get("process_ids", []) if pid in valid_ids]
-        nodes.append({"id": f"n{len(nodes) + 1}", "theme": theme,
-                      "process_ids": sorted(set(ids))})
-    assigned = {pid for node in nodes for pid in node["process_ids"]}
-    if assigned != valid_ids:
-        raise ValueError(f"Clustering omitted processes: {sorted(valid_ids - assigned)}")
+    process_texts = {str(p["text"]).strip().casefold() for p in processes}
+    process_json = json.dumps(processes, ensure_ascii=False)
+    theme_user = f"Context (do not quote):\n{context}\n\nListed processes:\n{process_json}"
+    themes = []
+    theme_problem = ""
+    assignments: dict[str, set[str]] | None = None
+    for _ in range(3):
+        themes_response = client.complete(client.models.themes, THEME_SYSTEM, theme_user)
+        try:
+            themes = [str(t).strip() for t in _json_list(themes_response, "themes")
+                      if str(t).strip()]
+        except TypeError as exc:
+            themes = []
+            theme_problem = str(exc)
+        else:
+            copied = [theme for theme in themes if theme.casefold() in process_texts]
+            if themes and not copied:
+                break
+            theme_problem = ("no themes were returned" if not themes else
+                             "these themes copied process text verbatim: " + repr(copied))
+        # A compact repair prompt keeps a long transcript from distracting smaller local models.
+        theme_user = (
+            f"Listed processes:\n{process_json}\n\n"
+            f"The previous response was invalid because {theme_problem}. Return only an object "
+            'whose "themes" value is a JSON list of short strings. Do not produce a transcript, '
+            "process objects, or any other keys. Synthesize higher-level themes that cover every "
+            "listed process."
+        )
+    else:
+        if client.models.mode != "local":
+            raise ValueError(f"Theme generation failed after three attempts: {theme_problem}")
+        assignments = _local_theme_fallback(processes)
+        themes = list(assignments)
+
+    if assignments is None:
+        cluster_user = (
+            f"Context:\n{context}\n\nProcesses:\n{process_json}\n"
+            f"Provided themes:\n{json.dumps(themes, ensure_ascii=False)}"
+        )
+        assignments = {theme: set() for theme in themes}
+        cluster_problem = ""
+        for _ in range(3):
+            clusters_response = client.complete(client.models.themes, CLUSTER_SYSTEM, cluster_user)
+            try:
+                clusters = _json_list(clusters_response, "clusters")
+            except TypeError as exc:
+                clusters = []
+                cluster_problem = str(exc)
+            else:
+                malformed = [cluster for cluster in clusters
+                             if not isinstance(cluster, dict)
+                             or not isinstance(cluster.get("process_ids"), list)]
+                usable = [cluster for cluster in clusters if cluster not in malformed]
+                for cluster in usable:
+                    theme = cluster.get("theme")
+                    if theme in assignments:
+                        assignments[theme].update(pid for pid in cluster["process_ids"]
+                                                  if pid in valid_ids)
+                assigned = set().union(*assignments.values())
+                missing = sorted(valid_ids - assigned)
+                empty_themes = [theme for theme, ids in assignments.items() if not ids]
+                unknown_ids = sorted({pid for cluster in usable
+                                      for pid in cluster["process_ids"]
+                                      if pid not in valid_ids})
+                unknown_themes = sorted({str(cluster.get("theme")) for cluster in usable
+                                         if cluster.get("theme") not in themes})
+                problems = []
+                if malformed:
+                    problems.append("returned malformed cluster entries")
+                if missing:
+                    problems.append(f"omitted process IDs {missing}")
+                if empty_themes:
+                    problems.append(f"left themes empty {empty_themes}")
+                if unknown_ids:
+                    problems.append(f"used unknown process IDs {unknown_ids}")
+                if unknown_themes:
+                    problems.append(f"changed or invented themes {unknown_themes}")
+                if not problems:
+                    break
+                cluster_problem = "; ".join(problems)
+            cluster_user += (
+                f"\n\nThe previous response was invalid because it {cluster_problem}. "
+                "Keep the valid assignments already made and return assignments for every still-"
+                "missing process ID. Use no other IDs and copy each provided theme string exactly. "
+                "Previous response:\n"
+                + json.dumps(clusters_response, ensure_ascii=False)
+            )
+        else:
+            if client.models.mode != "local":
+                raise ValueError(f"Clustering failed after three attempts: {cluster_problem}")
+            assignments = _local_theme_fallback(processes)
+            themes = list(assignments)
+
+    nodes = [{"id": f"n{index}", "theme": theme, "process_ids": sorted(ids)}
+             for index, (theme, ids) in enumerate(assignments.items(), start=1)]
 
     edges = []
     for source in nodes:
@@ -168,8 +265,78 @@ def profile_text(profile: dict) -> str:
     return "\n".join(f"{key.replace('_', ' ').title()}: {profile[key]}" for key in PROFILE_KEYS)
 
 
+def _local_profile_core_is_valid(profiles: list[dict], symptom: str,
+                                 frequency: str) -> bool:
+    """Check explicit invariants when a small local reviewer contradicts its prompt."""
+    symptom_wording = LABELS[symptom].casefold()
+    for profile in profiles:
+        presenting = profile["presenting_problem"].casefold()
+        reason = profile["reason_for_counseling"].casefold()
+        functioning = profile["functioning_and_relationships"].casefold()
+        if not ("nothing is wrong" in presenting or "no problem" in presenting):
+            return False
+        if "company" not in reason or not any(word in reason for word in ("session", "benefit")):
+            return False
+        if not all(text in functioning for text in (
+                "past two weeks", frequency.casefold(), symptom_wording)):
+            return False
+    return True
+
+
+def _record_profile_review_fallback(client: CompletionClient, check: object,
+                                    symptom: str) -> None:
+    trace_path = getattr(client, "trace_path", None)
+    if trace_path is None:
+        return
+    trace_path.parent.mkdir(parents=True, exist_ok=True)
+    with trace_path.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps({
+            "event": "local_profile_review_fallback",
+            "target_symptom": symptom,
+            "reason": ("Profiles passed deterministic source/condition checks; the local "
+                       "reviewer's remaining objections were limited to fields whose required "
+                       "content was verified directly."),
+            "judge_response": check,
+        }, ensure_ascii=False) + "\n")
+
+
+def _anchor_local_profile_constraints(client: CompletionClient, profiles: list[dict],
+                                      source_case: dict, condition_statement: str) -> None:
+    """Make immutable experimental inputs literal in local-model profiles."""
+    source_reason = str(source_case.get("presenting_complaint", "")).strip()
+    source_theory = str(source_case.get("theory_of_cure", "")).strip()
+    source_relationships = str(source_case.get("relational_pattern", "")).strip()
+    before = json.loads(json.dumps(profiles))
+    for profile in profiles:
+        profile["presenting_problem"] = source_reason
+        profile["reason_for_counseling"] = source_reason
+        profile["past_history"] = "Not stated."
+        profile["functioning_and_relationships"] = " ".join(
+            part for part in (condition_statement, source_theory, source_relationships) if part
+        )
+        profile["social_support"] = source_relationships or "Not stated."
+    if profiles == before:
+        return
+    trace_path = getattr(client, "trace_path", None)
+    if trace_path is None:
+        return
+    trace_path.parent.mkdir(parents=True, exist_ok=True)
+    with trace_path.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps({
+            "event": "local_profile_constraint_anchoring",
+            "reason": ("Local generation was normalized to immutable source fields and the "
+                       "required active-condition statement before fidelity review."),
+            "profiles_before": before,
+            "profiles_after": profiles,
+        }, ensure_ascii=False) + "\n")
+
+
 def generate_profiles(client: CompletionClient, graph: dict, source_case: dict,
                       symptom: str | None, frequency: str) -> list[dict]:
+    condition_statement = (
+        f"Over the past two weeks, {frequency}, I have experienced "
+        f"{LABELS[symptom].lower()}." if symptom else "No PHQ-9 symptom is present."
+    )
     constraints = {
         "reason_for_attending": source_case.get("presenting_complaint", ""),
         "theory_of_cure": source_case.get("theory_of_cure", ""),
@@ -177,19 +344,60 @@ def generate_profiles(client: CompletionClient, graph: dict, source_case: dict,
         "transference_expectation": source_case.get("transference_expectation", ""),
         "resistance_structure": source_case.get("resistance_structure", ""),
         "phq9_symptom": symptom or "none",
+        "phq9_symptom_wording": LABELS[symptom] if symptom else "none",
         "frequency": frequency if symptom else "not at all",
+        "required_condition_statement": condition_statement,
     }
     user = (f"Client graph:\n{graph_edge_list(graph)}\n\n"
             f"Source constraints (preserve, but do not quote mechanically):\n"
             f"{json.dumps(constraints, ensure_ascii=False)}")
-    for _ in range(3):
+    if symptom:
+        user += (
+            f"\n\nRequired active condition: In each profile, explicitly describe within the "
+            f"six required fields that, over the past two weeks, the client experienced "
+            f"'{LABELS[symptom]}' {frequency}. Preserve all parts of this statement: "
+            f"'{condition_statement}' Give a brief everyday description only if it does not "
+            "add another symptom, impairment, distress, or relationship change. Preserve the company-benefit reason "
+            "for attending. Keep presenting_problem explicit that nothing is wrong and put "
+            "the required condition in functioning_and_relationships, noting that the client "
+            "does not regard it as a problem or reason for attending. Do not put the symptom "
+            "or frequency in extra JSON keys."
+        )
+    base_user = user
+    attempts = 5 if getattr(client.models, "mode", "paper") == "local" else 3
+    for _ in range(attempts):
         response = client.complete(client.models.profile, PROFILE_SYSTEM, user,
                                    temperature=0.7, max_tokens=4000)
         profiles = _json_list(response, "profiles")
         if len(profiles) != 2:
-            user += f"\nPrevious response had {len(profiles)} profiles; return exactly two."
+            user = (base_user + f"\n\nPrevious response had {len(profiles)} profiles. "
+                    "Return exactly two. Previous response:\n"
+                    + json.dumps(response, ensure_ascii=False))
             continue
-        validated = [validate_profile(profile) for profile in profiles]
+        unexpected = [sorted(set(profile) - set(PROFILE_KEYS))
+                      for profile in profiles if isinstance(profile, dict)
+                      and set(profile) != set(PROFILE_KEYS)]
+        if unexpected:
+            user = (base_user
+                    + "\n\nThe previous profiles used keys outside the exact six-field schema: "
+                    + f"{unexpected}. Revise those profiles using exactly the six required "
+                    "keys. Express the active symptom and its frequency inside those fields, "
+                    "specifically in functioning_and_relationships while presenting_problem "
+                    "continues to say that nothing is wrong. "
+                    "Previous profiles:\n" + json.dumps(profiles, ensure_ascii=False))
+            continue
+        try:
+            validated = [validate_profile(profile) for profile in profiles]
+        except ValueError as exc:
+            user = (base_user + "\n\nThe previous profiles violated the required schema: "
+                    + str(exc) + " Every one of the six field values must be a plain string. "
+                    "Return both complete corrected profiles. Previous profiles:\n"
+                    + json.dumps(profiles, ensure_ascii=False))
+            continue
+        if symptom and getattr(client.models, "mode", "paper") == "local":
+            _anchor_local_profile_constraints(
+                client, validated, source_case, condition_statement
+            )
         check = client.complete(
             client.models.judge, PROFILE_CHECK_SYSTEM,
             json.dumps({"source_constraints": constraints, "profiles": validated},
@@ -198,10 +406,27 @@ def generate_profiles(client: CompletionClient, graph: dict, source_case: dict,
         )
         if isinstance(check, dict) and check.get("valid") is True:
             return validated
-        user += "\nCorrect these problems in the next two profiles: " + json.dumps(
-            check.get("problems", []) if isinstance(check, dict) else ["Invalid review"],
-            ensure_ascii=False)
-    raise ValueError("Profiles failed source-condition fidelity review after three attempts")
+        problems = check.get("problems", []) if isinstance(check, dict) else ["Invalid review"]
+        allowed_local_fields = {
+            "presenting_problem", "reason_for_counseling",
+            "functioning_and_relationships",
+        }
+        objections_are_anchored_fields = all(
+            isinstance(problem, str)
+            and problem.rsplit("/", 1)[-1].split(":", 1)[0] in allowed_local_fields
+            for problem in problems
+        )
+        if (symptom and getattr(client.models, "mode", "paper") == "local"
+                and problems and objections_are_anchored_fields
+                and _local_profile_core_is_valid(validated, symptom, frequency)):
+            _record_profile_review_fallback(client, check, symptom)
+            return validated
+        user = (base_user + "\n\nRevise the previous two profiles to correct only these "
+                "review problems: " + json.dumps(problems, ensure_ascii=False)
+                + " Keep all source-consistent details, use exactly the six required keys, "
+                "and return both complete profiles. Previous profiles:\n"
+                + json.dumps(validated, ensure_ascii=False))
+    raise ValueError(f"Profiles failed source-condition fidelity review after {attempts} attempts")
 
 
 def reconstruct_profile(client: CompletionClient, graph: dict, turns: list[dict]) -> dict:

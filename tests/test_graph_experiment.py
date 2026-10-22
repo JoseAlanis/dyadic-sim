@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,8 +13,13 @@ import run_graph_experiment as runner
 import simulation.dyad as dyad_mod
 import simulation.session as session_mod
 from agents.base_agent import AgentResponse
-from graph_experiment.llm import CompletionClient, Models
-from graph_experiment.pipeline import PROFILE_KEYS, construct_graph, source_units
+from graph_experiment.llm import CompletionClient, Models, _parse_json_response
+from graph_experiment.pipeline import (
+    PROFILE_KEYS,
+    construct_graph,
+    generate_profiles,
+    source_units,
+)
 from priors.patient_prior import PatientPrior
 from run_graph_experiment import selected_conditions
 from symptom_scoring.prior_vocabulary import KEYS
@@ -66,6 +70,221 @@ def test_single_local_edge_decision_can_create_edge():
     assert all(len(edge["votes"]) == 1 for edge in graph["edges"])
 
 
+def test_graph_retries_copied_themes_and_incomplete_clustering():
+    class RetryingClient:
+        def __init__(self):
+            self.models = SimpleNamespace(process="process", themes="themes", edges=())
+            self.theme_calls = 0
+            self.cluster_calls = 0
+
+        def complete(self, model, system, user, **kwargs):
+            if "psychological process classifier" in system:
+                text = user.split("Target passage: ")[1].split("\n")[0]
+                return {"is_process": True,
+                        "processes": [{"text": text, "types": ["Cognition"]}]}
+            if "Generate clinically meaningful themes" in system:
+                self.theme_calls += 1
+                if self.theme_calls == 1:
+                    return {"themes": ["I plan carefully."]}
+                return {"themes": ["The client uses deliberate routines to manage daily life."]}
+            if "classifying psychological processes under provided themes" in system:
+                self.cluster_calls += 1
+                ids = ["p1"] if self.cluster_calls == 1 else ["p2"]
+                return {"clusters": [{
+                    "theme": "The client uses deliberate routines to manage daily life.",
+                    "process_ids": ids,
+                }]}
+            raise AssertionError(f"Unexpected prompt: {system}")
+
+    client = RetryingClient()
+    graph = construct_graph(
+        client,
+        [{"source": "prior", "text": "I plan carefully."},
+         {"source": "prior", "text": "I keep a regular schedule."}],
+        "context",
+        source_kind="prior_plus_phq9",
+    )
+
+    assert client.theme_calls == 2
+    assert client.cluster_calls == 2
+    assert graph["nodes"][0]["process_ids"] == ["p1", "p2"]
+
+
+def test_local_graph_falls_back_when_theme_output_stays_malformed():
+    class MalformedThemeClient:
+        def __init__(self):
+            self.models = SimpleNamespace(
+                process="process", themes="themes", edges=(), mode="local"
+            )
+            self.theme_calls = 0
+
+        def complete(self, model, system, user, **kwargs):
+            if "psychological process classifier" in system:
+                text = user.split("Target passage: ")[1].split("\n")[0]
+                process_type = "Affect" if "frustrated" in text else "Cognition"
+                return {
+                    "is_process": True,
+                    "processes": [{"text": text, "types": [process_type]}],
+                }
+            if "Generate clinically meaningful themes" in system:
+                self.theme_calls += 1
+                return {"themes": {"invented_transcript": "not a list"}}
+            raise AssertionError("Clustering should not be needed for the local fallback")
+
+    client = MalformedThemeClient()
+    graph = construct_graph(
+        client,
+        [
+            {"source": "turn_1", "text": "I think carefully."},
+            {"source": "turn_2", "text": "I feel frustrated."},
+        ],
+        "context",
+        source_kind="synthetic_transcript",
+    )
+
+    assert client.theme_calls == 3
+    assert len(graph["nodes"]) == 2
+    assert {process_id for node in graph["nodes"] for process_id in node["process_ids"]} == {
+        "p1",
+        "p2",
+    }
+
+
+def test_local_graph_falls_back_when_cluster_output_stays_malformed():
+    class MalformedClusterClient:
+        def __init__(self):
+            self.models = SimpleNamespace(
+                process="process", themes="themes", edges=(), mode="local"
+            )
+            self.cluster_calls = 0
+
+        def complete(self, model, system, user, **kwargs):
+            if "psychological process classifier" in system:
+                text = user.split("Target passage: ")[1].split("\n")[0]
+                return {
+                    "is_process": True,
+                    "processes": [{"text": text, "types": ["Cognition"]}],
+                }
+            if "Generate clinically meaningful themes" in system:
+                return {"themes": ["Deliberate thinking guides everyday decisions."]}
+            if "classifying psychological processes" in system:
+                self.cluster_calls += 1
+                return {"clusters": {"invented_turn": 11}}
+            raise AssertionError(f"Unexpected prompt: {system}")
+
+    client = MalformedClusterClient()
+    graph = construct_graph(
+        client,
+        [
+            {"source": "turn_1", "text": "I think carefully."},
+            {"source": "turn_2", "text": "I make deliberate choices."},
+        ],
+        "context",
+        source_kind="synthetic_transcript",
+    )
+
+    assert client.cluster_calls == 3
+    assert len(graph["nodes"]) == 1
+    assert graph["nodes"][0]["process_ids"] == ["p1", "p2"]
+
+
+def test_active_symptom_must_be_inside_exact_profile_schema():
+    class ProfileClient:
+        def __init__(self):
+            self.models = SimpleNamespace(profile="profile", judge="judge", mode="local")
+            self.profile_calls = 0
+            self.judge_calls = 0
+
+        def complete(self, model, system, user, **kwargs):
+            if model == "profile":
+                self.profile_calls += 1
+                profile = {key: "Source-consistent detail" for key in PROFILE_KEYS}
+                if self.profile_calls == 1:
+                    profile["phq9_symptom"] = "lack_of_pleasure"
+                else:
+                    assert "within the six required fields" in user
+                    assert "put the required condition in functioning_and_relationships" in user
+                    profile["presenting_problem"] = "Nothing is wrong."
+                    profile["functioning_and_relationships"] = (
+                        "For two weeks I have had little interest nearly every day."
+                    )
+                return {"profiles": [profile, profile]}
+            self.judge_calls += 1
+            return {"valid": True, "problems": []}
+
+    client = ProfileClient()
+    profiles = generate_profiles(
+        client,
+        {"nodes": [], "edges": []},
+        {"presenting_complaint": "I am using a company-benefit session."},
+        "lack_of_pleasure",
+        "nearly every day",
+    )
+
+    assert client.profile_calls == 2
+    assert client.judge_calls == 1
+    assert set(profiles[0]) == set(PROFILE_KEYS)
+
+
+def test_local_profile_review_fallback_is_narrow():
+    class ContradictoryReviewerClient:
+        def __init__(self):
+            self.models = SimpleNamespace(profile="profile", judge="judge", mode="local")
+
+        def complete(self, model, system, user, **kwargs):
+            if model == "judge":
+                return {"valid": False,
+                        "problems": ["profiles/0/presenting_problem",
+                                     "profiles/1/presenting_problem"]}
+            profile = {key: "Source-consistent detail" for key in PROFILE_KEYS}
+            profile["presenting_problem"] = "Nothing is wrong."
+            profile["reason_for_counseling"] = "My company offered a benefit session."
+            profile["functioning_and_relationships"] = (
+                "Over the past two weeks, nearly every day, I have experienced little "
+                "interest or pleasure in doing things."
+            )
+            return {"profiles": [profile, profile]}
+
+    profiles = generate_profiles(
+        ContradictoryReviewerClient(),
+        {"nodes": [], "edges": []},
+        {"presenting_complaint": "Nothing is wrong; this is a company session."},
+        "lack_of_pleasure",
+        "nearly every day",
+    )
+
+    assert len(profiles) == 2
+    assert profiles[0]["presenting_problem"] == (
+        "Nothing is wrong; this is a company session."
+    )
+    assert profiles[0]["reason_for_counseling"] == profiles[0]["presenting_problem"]
+
+
+def test_profile_generation_retries_non_string_fields():
+    class SchemaRetryClient:
+        def __init__(self):
+            self.models = SimpleNamespace(profile="profile", judge="judge", mode="paper")
+            self.profile_calls = 0
+
+        def complete(self, model, system, user, **kwargs):
+            if model == "judge":
+                return {"valid": True, "problems": []}
+            self.profile_calls += 1
+            profile = {key: "detail" for key in PROFILE_KEYS}
+            if self.profile_calls == 1:
+                profile["basic_information"] = {"age": 35}
+            return {"profiles": [profile, profile]}
+
+    client = SchemaRetryClient()
+    profiles = generate_profiles(
+        client, {"nodes": [], "edges": []}, {"presenting_complaint": "Nothing is wrong."},
+        None, "nearly every day",
+    )
+
+    assert client.profile_calls == 2
+    assert profiles[0]["basic_information"] == "detail"
+
+
 def test_profile_prompt_does_not_include_original_case_or_symptom():
     prior = PatientPrior(case_name="no_complaint",
                          presenting_complaint="SOURCE PRIOR SENTINEL",
@@ -106,32 +325,36 @@ def test_local_mode_rejects_ollama_cloud_model(monkeypatch):
         Models.from_env(mode="local")
 
 
-def test_local_json_completion_requests_ollama_json_mode_and_traces_retry(tmp_path, monkeypatch):
-    requests = []
+@pytest.mark.parametrize("suffix", ["'", r"\n"])
+def test_local_json_parser_accepts_harmless_model_suffixes(suffix):
+    assert _parse_json_response('{"is_process": false, "processes": []}' + suffix) == {
+        "is_process": False, "processes": []}
 
-    def create(**kwargs):
-        requests.append(kwargs)
-        content = "invalid JSON" if len(requests) == 1 else '{"is_process": false, "processes": []}'
-        return SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content=content),
-                                     finish_reason="stop")],
-            model=kwargs["model"], id=f"call-{len(requests)}",
-            system_fingerprint=None, usage=None,
-        )
 
-    client = CompletionClient(Models.from_env(mode="local"), tmp_path / "trace.jsonl")
-    monkeypatch.setattr(client, "_client", lambda _model: SimpleNamespace(
-        chat=SimpleNamespace(completions=SimpleNamespace(create=create))))
+def test_local_json_parser_rejects_multiple_values():
+    with pytest.raises(ValueError):
+        _parse_json_response('{"is_process": true}; {"is_process": false}')
 
-    result = client.complete("qwen2.5:7b", "Return JSON only", "Classify this")
 
-    assert result == {"is_process": False, "processes": []}
-    assert len(requests) == 2
-    assert all(request["response_format"] == {"type": "json_object"}
-               for request in requests)
-    trace = [json.loads(line) for line in client.trace_path.read_text().splitlines()]
-    assert [entry["attempt"] for entry in trace] == [1, 2]
-    assert all(entry["finish_reason"] == "stop" for entry in trace)
+def test_local_json_calls_request_ollama_json_mode(tmp_path, monkeypatch):
+    request = {}
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            request.update(kwargs)
+            message = SimpleNamespace(content='{"answer": true}')
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)],
+                                   model="qwen2.5:7b", id="response-id",
+                                   system_fingerprint=None, usage=None)
+
+    fake = SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions()))
+    models = Models.from_env(mode="local")
+    client = CompletionClient(models, tmp_path / "trace.jsonl")
+    monkeypatch.setattr(client, "_client", lambda model: fake)
+
+    assert client.complete(models.process, "Return JSON.", "Classify this.") == {
+        "answer": True}
+    assert request["response_format"] == {"type": "json_object"}
 
 
 def test_batch_writes_two_linked_sessions_and_resumes(tmp_path, monkeypatch):
