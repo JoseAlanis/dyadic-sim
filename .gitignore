@@ -25,6 +25,12 @@ __pycache__/
 # record is its own directory under data/sessions/.
 *.log
 
+# Coverage data and reports.
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
 # Sessions and derived outputs: heavy and regenerable.
 data/*
 result/

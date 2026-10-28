@@ -30,7 +30,11 @@ torch = { index = "pytorch-cu128" }
 torchvision = { index = "pytorch-cu128" }
 
 [dependency-groups]
-dev = ["ruff>=0.14", "pytest>=8"]
+dev = [
+    "ruff>=0.14",
+    "pytest>=8",
+    "pytest-cov>=7.1.0",
+]
 
 [tool.ruff.lint]
 # Beyond the defaults (E4/E7/E9/F): import order, simplifications, timezone-aware
@@ -48,3 +52,13 @@ known-first-party = [
 # works, which is an undocumented requirement nobody should have to remember.
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+# The repository's own code: the top-level scripts and every package below the
+# root, not the tests. Run with `uv run pytest --cov`.
+source = ["."]
+omit = ["tests/*"]
+branch = true
+
+[tool.coverage.report]
+sort = "Cover"
