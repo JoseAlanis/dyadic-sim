@@ -2,19 +2,28 @@
 # generator is exercised end to end with stub agents
 # (tests/test_conversation_history.py), and the prompts are pinned by hash
 # (tests/test_golden_prompts.py). The embedding tests download
-# all-MiniLM-L6-v2 from the Hugging Face hub on first use.
+# all-MiniLM-L6-v2 from the Hugging Face hub on first use. Coverage of the
+# repository's code is written to the run's summary page.
 name: tests
 
 on:
   push:
   pull_request:
 
+# read only permissions
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      # Actions are pinned to commits, so a moved or replaced tag cannot change
+      # what runs here. Update the hash and the version comment together.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
         with:
           enable-cache: true
           python-version: "3.13"
@@ -23,4 +32,11 @@ jobs:
       - name: Lint
         run: uv run ruff check .
       - name: Test
-        run: uv run pytest -q
+        run: uv run pytest -q --cov
+      - name: Coverage summary
+        # Also after failing tests, whenever coverage data was written.
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -f .coverage ]; then
+            uv run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+          fi
