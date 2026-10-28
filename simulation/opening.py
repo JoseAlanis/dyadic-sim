@@ -1,9 +1,11 @@
 """How a session opens: the therapist's first words.
 
-The dyad already treats the opening as a therapist utterance: `dyad.run()` sets
-`latest_therapist = opening_utterance(...)` when there is no history, so the
-patient's first turn is a reply to it. Until generation_version 3 the text was a
-stage direction ("Say what brings you here"), not speech.
+The dyad treats the opening as the therapist's first utterance. It is saved with
+the session as `initial_patient_prompt` when the session starts, and both agents'
+histories begin with it (see simulation/turn_manager.py), so the patient's first
+turn is a reply to it and a resumed session keeps the opening it started with.
+Until generation_version 3 the text was a stage direction ("Say what brings you
+here"), not speech.
 
 Why that mattered: it is literally an instruction to state the presenting
 complaint, so it forced complaint-first structure into turn 1. Measured on 50

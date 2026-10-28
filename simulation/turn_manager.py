@@ -3,7 +3,18 @@ simulation/turn_manager.py
 
 Builds the full context passed to each agent on every turn:
     system_prompt = the agent's prior
-    messages      = the conversation so far, as alternating user/assistant turns
+    messages      = the conversation so far, in the order it was spoken
+
+The conversation starts with the therapist's opening, saved with the session as
+`initial_patient_prompt`, and alternates from there: opening, P1, T1, P2, T2, ...
+Each agent sees its own lines as "assistant" and the other's as "user", so the
+patient's list starts with the opening as a user message and the therapist's
+with the opening as its own first line.
+
+Until generation_version 6 the patient's list was built by swapping each
+(patient, therapist) pair, which put every therapist reply before the patient
+turn it answered, and neither agent saw the opening after turn 1. See
+simulation/utterance.py.
 
 The context window is the agent's only view of the world. There is no other
 carrier of memory. An earlier version also injected a per-turn, LLM-written
@@ -22,85 +33,77 @@ from priors.therapist_prior import TherapistPrior
 # model's context.
 HISTORY_WINDOW: int | None = None
 
+PATIENT = "patient"
+THERAPIST = "therapist"
+
 
 def build_therapist_context(
     prior: TherapistPrior,
+    opening: str,
     history: list[tuple[str, str]],   # list of (patient_text, therapist_text)
-    latest_patient_turn: str,
+    patient_turn: str,
 ) -> tuple[str, list[Message]]:
     """
     Build system prompt + message list for a therapist turn.
 
     Args:
-        prior:                The therapist's prior object
-        history:              Past (patient, therapist) turn pairs
-        latest_patient_turn:  The patient's most recent message
+        prior:         The therapist's prior object
+        opening:       The therapist's opening line, as saved with the session
+        history:       Completed (patient, therapist) turn pairs
+        patient_turn:  What the patient just said, which the therapist answers
 
     Returns:
         (system_prompt, messages) ready to pass to agent.complete()
     """
-    system_prompt = prior.build_system_prompt()
-    messages = _build_messages(
-        history=history,
-        latest_other_turn=latest_patient_turn,
-        own_role="assistant",    # therapist speaks as assistant
-        other_role="user",       # patient speaks as user
-    )
-    return system_prompt, messages
+    utterances = _conversation(opening, history) + [(PATIENT, patient_turn)]
+    return prior.build_system_prompt(), _as_messages(utterances, own=THERAPIST)
 
 
 def build_patient_context(
     prior: PatientPrior,
+    opening: str,
     history: list[tuple[str, str]],   # list of (patient_text, therapist_text)
-    latest_therapist_turn: str,
 ) -> tuple[str, list[Message]]:
     """
     Build system prompt + message list for a patient turn.
 
     Args:
-        prior:                  The patient's prior object
-        history:                Past (patient, therapist) turn pairs
-        latest_therapist_turn:  The therapist's most recent message
+        prior:    The patient's prior object
+        opening:  The therapist's opening line, as saved with the session
+        history:  Completed (patient, therapist) turn pairs; the patient answers
+                  the last therapist line, or the opening on the first turn
 
     Returns:
         (system_prompt, messages) ready to pass to agent.complete()
     """
-    system_prompt = prior.build_system_prompt()
-    # From the patient's perspective: therapist is user, patient is assistant
-    swapped = [(t, p) for p, t in history]
-    # Clear last therapist text to avoid duplication with latest_other_turn
-    if swapped and latest_therapist_turn:
-        swapped[-1] = ("", swapped[-1][1])
-    messages = _build_messages(
-        history=swapped,
-        latest_other_turn=latest_therapist_turn,
-        own_role="assistant",
-        other_role="user",
-    )
-    return system_prompt, messages
+    utterances = _conversation(opening, history)
+    return prior.build_system_prompt(), _as_messages(utterances, own=PATIENT)
 
 
-def _build_messages(
-    history: list[tuple[str, str]],
-    latest_other_turn: str,
-    own_role: str,
-    other_role: str,
-) -> list[Message]:
+def _conversation(opening: str, history: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """(speaker, text) in the order spoken, windowed by HISTORY_WINDOW.
+
+    A transcript row holds a patient line and the therapist's reply to it; the
+    opening precedes the first row. A window drops whole rows from the start,
+    and the opening with them once any row is dropped.
     """
-    Build an alternating user/assistant message list from history, applying
-    HISTORY_WINDOW if one is set.
+    kept = history if HISTORY_WINDOW is None else history[-HISTORY_WINDOW:]
+    utterances = [] if len(kept) < len(history) else [(THERAPIST, opening)]
+    for patient_text, therapist_text in kept:
+        utterances += [(PATIENT, patient_text), (THERAPIST, therapist_text)]
+    return utterances
+
+
+def _as_messages(utterances: list[tuple[str, str]], own: str) -> list[Message]:
+    """One message per utterance: the agent's own lines as assistant, the other's as user.
+
+    An empty line (a turn that was only stage directions, emptied by
+    clean_utterance) is left out of the history, as before version 6. The line
+    being answered is always sent.
     """
-    messages: list[Message] = []
-
-    windowed = history if HISTORY_WINDOW is None else history[-HISTORY_WINDOW:]
-
-    for other_text, own_text in windowed:
-        if other_text:
-            messages.append(Message(role=other_role, content=other_text))
-        if own_text:
-            messages.append(Message(role=own_role, content=own_text))
-
-    # Add the latest incoming turn
-    messages.append(Message(role=other_role, content=latest_other_turn))
-
-    return messages
+    last = len(utterances) - 1
+    return [
+        Message(role="assistant" if speaker == own else "user", content=text)
+        for i, (speaker, text) in enumerate(utterances)
+        if text or i == last
+    ]

@@ -7,7 +7,7 @@ from agents.base_agent import BaseAgent
 from priors.patient_prior import PatientPrior, build_patient_prior
 from priors.therapist_prior import TherapistPrior, build_therapist_prior
 from simulation.opening import opening_utterance
-from simulation.session import Session, new_session, resume_session
+from simulation.session import Session, check_continuable, new_session, resume_session
 from simulation.turn_manager import build_patient_context, build_therapist_context
 from simulation.utterance import clean_utterance
 
@@ -31,6 +31,14 @@ class Dyad:
         session_id: str | None = None,
         patient_id: str | None = None,
     ):
+        # A saved session is checked before anything is built, written or sent:
+        # one from another generator version must not grow (see
+        # simulation/session.py, check_continuable).
+        resumed = None
+        if session_id:
+            resumed = resume_session(session_id)
+            check_continuable(resumed)
+
         # Build priors
         self.therapist_prior: TherapistPrior = build_therapist_prior(orientation)
         self.patient_prior: PatientPrior = build_patient_prior(case_name)
@@ -39,24 +47,13 @@ class Dyad:
         self.therapist_agent: BaseAgent = build_agent(therapist_model, "therapist")
         self.patient_agent: BaseAgent = build_agent(patient_model, "patient")
 
-        # Session (new or resumed)
-        if session_id:
-            self.session = resume_session(session_id)
-
-            metadata_changed = False
-            if not getattr(self.session, "patient_symptoms", ""):
-                self.session.patient_symptoms = self.patient_prior.symptoms
-                metadata_changed = True
-            if not getattr(self.session, "patient_symptom_levels", {}):
-                self.session.patient_symptom_levels = self.patient_prior.symptom_levels
-                metadata_changed = True
-            if not getattr(self.session, "initial_patient_prompt", None):
-                self.session.initial_patient_prompt = opening_utterance()
-                metadata_changed = True
+        # Session (new or resumed). A resumed record is taken as saved: its
+        # opening, symptoms and version are never back-filled from the current
+        # configuration.
+        if resumed is not None:
+            self.session = resumed
             if patient_id is not None and self.session.patient_id != patient_id:
                 self.session.patient_id = patient_id
-                metadata_changed = True
-            if metadata_changed:
                 self.session.save_metadata()
         else:
             self.session = new_session(
@@ -84,7 +81,8 @@ class Dyad:
         )
         console.rule()
 
-        opening_prompt = opening_utterance()
+        # The opening as saved with the session, not as the code now words it.
+        opening = self.session.initial_patient_prompt
 
         start_turn = self.session.turn_count + 1
 
@@ -95,14 +93,12 @@ class Dyad:
 
             # --- Patient turn ---
 
-            # First turn: the patient answers the opening; afterwards, the
-            # therapist's latest utterance.
-            latest_therapist = history[-1][1] if history else opening_prompt
-
+            # The patient answers the opening on the first turn and the
+            # therapist's latest line afterwards; both are the end of `history`.
             patient_system, patient_messages = build_patient_context(
                 prior=self.patient_prior,
+                opening=opening,
                 history=history,
-                latest_therapist_turn=latest_therapist,
             )
 
             patient_response = self.patient_agent.complete(
@@ -129,8 +125,9 @@ class Dyad:
 
             therapist_system, therapist_messages = build_therapist_context(
                 prior=self.therapist_prior,
+                opening=opening,
                 history=history,
-                latest_patient_turn=patient_text,
+                patient_turn=patient_text,
             )
 
             therapist_response = self.therapist_agent.complete(
