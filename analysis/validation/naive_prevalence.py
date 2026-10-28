@@ -22,8 +22,8 @@ keeps the word that matched and the sentence it came from; `--evidence` dumps
 them so any cell can be audited by hand.
 
     PYTHONPATH=. python analysis/validation/naive_prevalence.py \
-        --sessions 'data/sessions/session_*' --prefix power01 \
-        --out-dir data/results/power01
+        --sessions 'data/sessions/session_*' --prefix <prefix> \
+        --out-dir data/results/<prefix>
 
 This is the floor, not the measure. Its mean lift over control is small, and
 for some symptoms negative - the case narrative produces the symptom whether

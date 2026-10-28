@@ -209,8 +209,8 @@ def _clause_of(sentence: str, position: int) -> str:
 # The cause is structural rather than a missing word. `_DECREMENT_FRAME` in
 # symptom_lexicon.py encodes POLARITY ("no", "hasn't", "lost") but nothing about
 # OWNERSHIP, so "my brother hasn't enjoyed anything since his divorce" fires
-# `lack_of_pleasure` exactly as "I haven't enjoyed anything" does. That was true
-# before the 2026-08-12 term expansion; the negatives simply made it visible.
+# `lack_of_pleasure` exactly as "I haven't enjoyed anything" does, whatever the
+# term list contains.
 #
 # Handled here rather than in the patterns because it is the same shape as
 # negation: a clause-level property of the context, not a property of the term.

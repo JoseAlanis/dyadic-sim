@@ -1,10 +1,10 @@
-"""The simplified generator must still read what the old one wrote.
+"""The generator must still read records and case files written by earlier versions.
 
-generation_version 4 removed the hidden agenda, the hazard monitor and per-turn
-state compression (see simulation/utterance.py). Three things must hold across
-that boundary: old transcripts replay, old case files load without the removed
-blocks reaching the prompt, and new metadata carries the new version and none
-of the removed keys.
+Older transcript rows and metadata carry fields the current generator no longer
+writes (a hidden agenda, a hazard monitor, state snapshots), and older case
+files carry blocks it no longer uses. Three things must hold: old transcripts
+replay, old case files load without those blocks reaching the prompt, and new
+metadata carries the current version and none of the retired keys.
 
     uv run pytest tests/test_simulation_core.py -q
 """

@@ -41,7 +41,7 @@ def model():
 
 
 def test_model_limit_is_what_the_analysis_assumes(model):
-    """If this changes, every coverage claim in VALIDATION.md needs rechecking."""
+    """If this changes, coverage figures computed under the old limit no longer hold."""
     assert model.max_seq_length == 256
 
 

@@ -249,9 +249,9 @@ def summarise(df, column, model, symptom):
     Scope, stated because the implementation cannot support more: only SESSIONS
     are resampled, so the interval is conditional on the cases actually
     observed. It does NOT estimate generalisation to new patient cases, and
-    calling cases "the unit of generalisation" would overstate it - power01 has
-    a single case and a single model pair, where case-level generalisation is
-    not estimable at all. Generalising over cases needs many more of them and a
+    calling cases "the unit of generalisation" would overstate it - with a
+    single case and a single model pair, case-level generalisation is not
+    estimable at all. Generalising over cases needs many more of them and a
     case-level resampling or hierarchical model.
 
     The interval is a bootstrap resampling whole SESSIONS within case and

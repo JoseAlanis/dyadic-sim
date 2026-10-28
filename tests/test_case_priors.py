@@ -1,22 +1,13 @@
 """A case prior must not contain the vocabulary its detectors hunt for.
 
-The patient agent is HANDED the prior and paraphrases it for ten turns, so any
+The patient agent is HANDED the prior and paraphrases it on every turn, so any
 symptom term written into a case propagates into every transcript generated from
 it - including the control sessions, where nothing was injected and the base rate
 is supposed to be the thing you measure against.
 
-This is not hypothetical. `feeling_off` was written deliberately as the neutral
-bed, with a warning in the file itself about a draft that had leaked symptoms,
-and it still floods emotional-numbness detectors in 100% of its own controls. The
-reason is one phrase in its presenting complaint:
-
-    "I've just felt a bit off for a while, not myself"
-                                          ^^^^^^^^^^^
-`not myself` is a literal entry in `depressed_mood`'s `self_framed` list. The bed
-seeds the exact string the detector looks for, and every session inherits it.
-
-Thirty seconds of this check would have saved that arm. So it runs on every
-commit instead.
+One phrase is enough. "I've just felt a bit off for a while, not myself" seeds
+`not myself`, a literal entry in `depressed_mood`'s `self_framed` list, into
+every session of that case. The check is cheap, so it runs on every commit.
 
     uv run pytest tests/test_case_priors.py -q
 """

@@ -84,12 +84,12 @@ matched-by-case construction. While the table and the figure used different
 estimators they disagreed by a margin comparable to the effect being reported.
 
 Usage:
-  # the active corpus (default): data/sessions -> data/results/power01
+  # the active corpus (default): data/sessions -> data/results/<ACTIVE_PREFIX>
   PYTHONPATH=. python analysis/validation/symptom_embed.py
 
   # spec-primary configuration, written explicitly:
   PYTHONPATH=. python analysis/validation/symptom_embed.py \
-      --prefix power01 --unit bounded-turn --unit-agg max \
+      --prefix <prefix> --unit bounded-turn --unit-agg max \
       --references expanded --reference-agg mean --clean-text
 
 Outputs (in --out-dir):

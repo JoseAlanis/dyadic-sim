@@ -4,11 +4,11 @@ Derived from the sessions on disk rather than a hand-maintained ledger, so it
 cannot drift out of sync with reality. A cell is (prefix, case, symptom); n is
 the number of sessions in it.
 
-    PYTHONPATH=. python analysis/validation/design_status.py --prefix power01
+    PYTHONPATH=. python analysis/validation/design_status.py --prefix <prefix>
 
 Top up a short cell by continuing the run numbering rather than restarting it:
 
-    ... --prefix power01 --case afraid_of_dogs --symptoms sleep_problems \\
+    ... --prefix <prefix> --case <case> --symptoms sleep_problems \\
         --repeats 5 --start-run 6
 
 Sessions are counted, not run numbers: a crashed batch that left run_3 twice

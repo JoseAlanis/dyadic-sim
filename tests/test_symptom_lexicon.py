@@ -530,10 +530,10 @@ def test_predicate_frame_through_the_full_scanner(text, detected, refused_by):
 # ---------------------------------------------------------------------------
 # The metaphor depression and panic share.
 #
-# All strings are verbatim patient speech from the 126 hand-coded power01
-# `afraid_of_dogs` sessions. "A weight on my chest" drove 8 of 28 false-positive
-# evidence rows for `depressed_mood`, whose precision measured 18.5% against
-# human labels. On an anxiety bed the phrase usually describes a panic body.
+# All strings are verbatim simulated patient speech from `afraid_of_dogs`
+# sessions. "A weight on my chest" is a common false positive for
+# `depressed_mood`: on an anxiety case the phrase usually describes a panic
+# body.
 #
 # The pairing is the point: the SAME phrase carries both readings, so these
 # cases only stay separated as long as the context cues do the work.
@@ -557,7 +557,7 @@ SOMATIC_NOT_MOOD = [                      # panic / relief / trigger-bound
 MOOD_NOT_SOMATIC = [                      # the same metaphor, reported as a state
     "It's like this big, heavy weight on my chest that won't go away.",
     "Every day feels heavy, like there's this weight on my chest that won't go away.",
-    # copula form: silent before 2026-08-13 because one intervening word broke it
+    # copula form: one intervening word must not break the match
     "I wake up and it's like this heavy weight is on my chest, you know?",
 ]
 
@@ -625,9 +625,9 @@ def test_mood_down_still_fires_in_both_panels(text):
 def test_somatic_guard_touches_only_the_shared_metaphor():
     """It must not become a general 'anxious sentences do not count' rule.
 
-    Measured on power01, the guard moves `depressed_mood` and nothing else. This
-    pins that: a panic sentence with no shared metaphor in it is unaffected, and
-    other symptoms firing inside such a sentence are unaffected.
+    The guard moves `depressed_mood` and nothing else. This pins that: a panic
+    sentence with no shared metaphor in it is unaffected, and other symptoms
+    firing inside such a sentence are unaffected.
     """
     from analysis.validation.lexicon_detect import is_somatic_not_mood
 
@@ -640,7 +640,7 @@ def test_somatic_guard_touches_only_the_shared_metaphor():
 
 
 def _prefix_only(lex):
-    """The pre-2026-08-13 lexicon: predicate terms folded back into prefix-only.
+    """The lexicon with predicate terms folded back into prefix-only.
 
     Reconstructed from the same term tuples rather than hardcoded, so the
     comparison cannot drift out of date when vocabulary changes later.

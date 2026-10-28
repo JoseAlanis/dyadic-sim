@@ -100,8 +100,7 @@ _SELF_FRAME = (
 )
 
 # "the experience belongs to me, but the subject is not I": impersonal
-# self-report. Added 2026-08-12 after measuring recall against the a-priori
-# exemplars: `_SELF_FRAME` requires a first-person subject, so "everything feels
+# self-report. `_SELF_FRAME` requires a first-person subject, so "everything feels
 # flat", "nothing goes in" and "the days blur together" could not fire no matter
 # what vocabulary was added. This is a frame gap, not a missing word.
 _EXPERIENTIAL_FRAME = (

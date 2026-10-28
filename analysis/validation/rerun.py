@@ -10,7 +10,7 @@ show the whole surface, including the configurations where it looks worse, and
 to let `spec.evaluate` deliver the verdict from the declared rule rather than
 from whichever number is largest.
 
-    PYTHONPATH=. python analysis/validation/rerun.py --out-dir data/results/tierC
+    PYTHONPATH=. python analysis/validation/rerun.py --prefixes <prefix> --out-dir data/results/<name>
 
 Both datasets informed pipeline development. Their reanalysis is exploratory and
 evaluates feasibility, robustness and measurement behaviour; it is not an
@@ -141,8 +141,8 @@ def historical_row(prefix: str, archive_root: str, target: str) -> dict | None:
     """The archived result, scored with the CURRENT estimand.
 
     Using today's estimator on yesterday's data isolates what the PIPELINE
-    changed from what the ESTIMATOR changed. The archived numbers as originally
-    reported are in VALIDATION.md; this is the like-for-like comparison.
+    changed from what the ESTIMATOR changed: a like-for-like comparison with
+    the archived numbers as originally reported.
     """
     path = os.path.join(archive_root, prefix, "symptom_embed_long.csv")
     if not os.path.exists(path):
