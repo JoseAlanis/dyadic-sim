@@ -25,6 +25,7 @@ load_dotenv()
 
 from priors.loader import list_cases, list_orientations
 from simulation.dyad import Dyad
+from simulation.session import IncompatibleSessionError
 
 
 def parse_args() -> argparse.Namespace:
@@ -108,14 +109,18 @@ def main() -> None:
         with open(meta_path) as f:
             meta = json.load(f)
 
-        dyad = Dyad(
-            therapist_model=meta["therapist_model"],
-            patient_model=meta["patient_model"],
-            case_name=meta["case_name"],
-            orientation=meta.get("orientation", "psychodynamic"),
-            session_id=session_id,
-            patient_id=args.patient_id,
-        )
+        try:
+            dyad = Dyad(
+                therapist_model=meta["therapist_model"],
+                patient_model=meta["patient_model"],
+                case_name=meta["case_name"],
+                orientation=meta.get("orientation", "psychodynamic"),
+                session_id=session_id,
+                patient_id=args.patient_id,
+            )
+        except IncompatibleSessionError as exc:
+            print(f"Error: {exc}")
+            sys.exit(1)
         dyad.run(n_turns=args.additional_turns, max_tokens=args.max_tokens)
         return
 

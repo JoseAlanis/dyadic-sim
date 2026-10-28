@@ -74,6 +74,7 @@ class Session:
             patient_id: str | None = None,
             conversation_language: str = "en",
             initial_patient_prompt: str | None = None,
+            generation_version: int | None = GENERATION_VERSION,
     ):
         self.session_id = session_id
         self.therapist_model = therapist_model
@@ -85,6 +86,10 @@ class Session:
         self.patient_id = patient_id
         self.conversation_language = conversation_language
         self.initial_patient_prompt = initial_patient_prompt
+        # The generator that wrote this record. A new session gets the current
+        # one; a resumed session keeps what its metadata says (None = absent =
+        # version 1), and saving never overwrites it.
+        self.generation_version = generation_version
         self.turn_count = 0
         self.transcript: list[TurnRecord] = []
         self.created_at = datetime.now(UTC).replace(tzinfo=None).isoformat()
@@ -291,7 +296,7 @@ class Session:
             "metadata_schema_version": 2,
             # What the agents were told to produce and what was done to their
             # output; see simulation/utterance.py. Absent == version 1 (pilot).
-            "generation_version": GENERATION_VERSION,
+            "generation_version": self.generation_version,
             "session_id": self.session_id,
             "patient_id": self.patient_id,
             "therapist_model": self.therapist_model,
@@ -308,6 +313,8 @@ class Session:
             "pdf_transcript_path": str(self._pdf_path),
         }
 
+        if self.generation_version is None:
+            del meta["generation_version"]  # keep an unversioned record unversioned
         merged = {**existing, **meta}
         if extra:
             merged.update(extra)
@@ -403,6 +410,7 @@ def resume_session(session_id: str) -> Session:
         patient_id=meta.get("patient_id"),
         conversation_language=meta.get("conversation_language", "en"),
         initial_patient_prompt=meta.get("initial_patient_prompt"),
+        generation_version=meta.get("generation_version"),
     )
 
     # Replay transcript
@@ -421,4 +429,31 @@ def resume_session(session_id: str) -> Session:
 
     session.created_at = meta.get("created_at", session.created_at)
     return session
+
+
+class IncompatibleSessionError(RuntimeError):
+    """A saved session that the current generator must not continue."""
+
+
+def check_continuable(session: Session) -> None:
+    """Refuse to continue a session that the current generator did not start.
+
+    Appending turns under another generation contract would mix two stimuli in
+    one transcript. Records from other versions stay readable (resume_session,
+    the scoring pipeline, the analyses); they only cannot grow. Call before any
+    agent is built or anything is written.
+    """
+    recorded = session.generation_version
+    if recorded != GENERATION_VERSION:
+        shown = "1 (implicit)" if recorded is None else recorded
+        raise IncompatibleSessionError(
+            f"{session.session_id} was generated at generation_version {shown}; "
+            f"this generator is version {GENERATION_VERSION} and cannot continue "
+            "it. Start a new session instead."
+        )
+    if not session.initial_patient_prompt:
+        raise IncompatibleSessionError(
+            f"{session.session_id} has no saved opening (initial_patient_prompt), "
+            "so its conversation cannot be rebuilt."
+        )
 

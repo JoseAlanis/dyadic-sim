@@ -112,7 +112,12 @@ _BLANK_LINES = re.compile(r"\n{3,}")
 #      are unchanged by this bump (case wording is versioned by prefix, as
 #      always). Sessions at v4 and v5 had different therapists and are not
 #      comparable.
-GENERATION_VERSION = 5
+#   6  Both agents receive the conversation in the order it was spoken,
+#      starting from the opening saved with the session
+#      (`initial_patient_prompt`); see simulation/turn_manager.py. A session
+#      can only be continued by the version that started it
+#      (`check_continuable` in simulation/session.py).
+GENERATION_VERSION = 6
 
 # Shared by both priors so the therapist and the patient are held to the same
 # rule. Phrased concretely: an earlier, vaguer "Do not describe what you are

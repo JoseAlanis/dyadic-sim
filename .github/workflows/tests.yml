@@ -1,0 +1,26 @@
+# Lint and test on every push and pull request. No model server is needed: the
+# generator is exercised end to end with stub agents
+# (tests/test_conversation_history.py), and the prompts are pinned by hash
+# (tests/test_golden_prompts.py). The embedding tests download
+# all-MiniLM-L6-v2 from the Hugging Face hub on first use.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.13"
+      - name: Install
+        run: uv sync --locked
+      - name: Lint
+        run: uv run ruff check .
+      - name: Test
+        run: uv run pytest -q
