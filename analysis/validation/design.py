@@ -7,6 +7,10 @@ module compares that to what is on disk and reports three things separately:
   unexpected   sessions present under a prefix the manifest does not describe
   extra        valid runs beyond `runs`, kept or not according to `inclusion`
 
+`runs` is one integer for every cell, or a mapping case -> integer when an
+arm's beds are sized differently (say 40 runs for one case and 10 for another).
+A case absent from the mapping is an error, not a default.
+
 The distinction matters. Suppose a cell declared for five runs turns out to hold
 six. The objection is not that an extra control biases anything - equal-case
 weighting absorbs it - but that if no rule said in advance whether it belonged,
@@ -33,6 +37,19 @@ def load_manifest(path: str = MANIFEST_PATH) -> dict:
         return yaml.safe_load(handle) or {}
 
 
+def expected_runs(spec: dict, case: str, prefix: str = "?") -> int:
+    """Declared runs for one case; see the module docstring."""
+    runs = spec["runs"]
+    if isinstance(runs, dict):
+        if case not in runs:
+            raise KeyError(
+                f"{MANIFEST_PATH}: `runs` for {prefix!r} is per-case but has no "
+                f"entry for {case!r}"
+            )
+        return int(runs[case])
+    return int(runs)
+
+
 def check(prefix: str, entries: list[dict], manifest: dict | None = None) -> dict:
     """Compare `scan_sessions()` output for one prefix against its design.
 
@@ -52,7 +69,6 @@ def check(prefix: str, entries: list[dict], manifest: dict | None = None) -> dic
         }
 
     cases, conditions = set(spec["cases"]), set(spec["conditions"])
-    expected_runs = int(spec["runs"])
     inclusion = spec.get("inclusion", "all_valid")
 
     counts: dict[tuple[str, str], list[int]] = defaultdict(list)
@@ -69,23 +85,26 @@ def check(prefix: str, entries: list[dict], manifest: dict | None = None) -> dic
             continue
         counts[cell].append(e["run"])
 
-    missing, extra = {}, {}
+    missing, extra, declared = {}, {}, {}
     for case in sorted(cases):
+        want = expected_runs(spec, case, prefix)
         for condition in sorted(conditions):
+            cell = f"{case}/{condition}"
+            declared[cell] = want
             runs = sorted(r for r in counts.get((case, condition), []) if r)
-            if len(runs) < expected_runs:
-                missing[f"{case}/{condition}"] = expected_runs - len(runs)
-            beyond = [r for r in runs if r > expected_runs]
+            if len(runs) < want:
+                missing[cell] = want - len(runs)
+            beyond = [r for r in runs if r > want]
             if beyond:
-                extra[f"{case}/{condition}"] = beyond
+                extra[cell] = beyond
 
     problems = []
     for cell, n in missing.items():
-        problems.append(f"{cell}: {n} run(s) short of {expected_runs}")
+        problems.append(f"{cell}: {n} run(s) short of {declared[cell]}")
     for cell, runs in extra.items():
         verdict = "included (inclusion: all_valid)" if inclusion == "all_valid" \
             else "EXCLUDED (inclusion: first_n)"
-        problems.append(f"{cell}: run(s) {runs} beyond {expected_runs} - {verdict}")
+        problems.append(f"{cell}: run(s) {runs} beyond {declared[cell]} - {verdict}")
     for u in unexpected:
         problems.append(f"unexpected cell {u['case']}/{u['condition']} run {u['run']}")
 
