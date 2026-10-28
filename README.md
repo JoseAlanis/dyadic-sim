@@ -9,6 +9,13 @@ sessions can then be scored for symptom expression.
 dyadic-sim is a research instrument. It does not provide therapy and is not a
 clinical tool.
 
+## About
+
+| | |
+|---|---|
+| CI | [![tests](https://github.com/JoseAlanis/dyadic-sim/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/JoseAlanis/dyadic-sim/actions/workflows/tests.yml) |
+| Meta | [![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE) [![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](pyproject.toml) |
+
 ## How a session works
 
 - **Priors.** The therapist prior is `config/priors/therapist/base.yaml` plus an
@@ -107,6 +114,9 @@ README).
 uv run pytest -q
 uv run ruff check .
 ```
+
+`uv run pytest --cov` adds a coverage table per file; `uv run coverage html`
+then writes a browsable report to `htmlcov/`.
 
 ## License
 
