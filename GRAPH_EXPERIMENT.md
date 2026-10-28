@@ -39,8 +39,8 @@ Mistral-Nemo dyad, as required by the experiment.
 
 ## Setup and run
 
-Follow the Windows [access and configuration steps](README.md#get-access-and-configure-it-on-windows)
-in the README. This script reads `.env` directly; `config/models.yaml` does not
+Copy `env.example` to `.env` and fill in the graph entries. This script reads
+`.env` directly; `config/models.yaml` does not
 choose its graph models. The two large open models may run on any compatible
 server. Without `GRAPH_MODEL_BASE_URL`, they are sought in local Ollama. Set
 `OPENAI_API_KEY` for GPT-4o and GPT-4o-mini and run `mistral-nemo` in Ollama.
@@ -48,22 +48,22 @@ If the graph server exposes different IDs for the same weights, set
 `PAPER_LLAMA_MODEL_ID` and `PAPER_QWEN_MODEL_ID`; both IDs are recorded in the
 run manifest.
 
-```powershell
-uv run python .\run_graph_experiment.py --check
-uv run python .\run_graph_experiment.py --conditions no_symptoms --repeats 1 --output-dir .\data\graph_experiments\pilot_access
-uv run python .\run_graph_experiment.py
+```bash
+uv run python run_graph_experiment.py --check
+uv run python run_graph_experiment.py --conditions no_symptoms --repeats 1 --output-dir data/graph_experiments/pilot_access
+uv run python run_graph_experiment.py
 ```
 
-For a fully local run after pulling the models listed in the
-[README](README.md#run-without-paid-model-apis-on-another-laptop):
+For a fully local run, pull the local models first:
 
-```powershell
-uv run python .\run_graph_experiment.py --model-mode local --check
-uv run python .\run_graph_experiment.py --model-mode local --conditions no_symptoms --repeats 1 --output-dir .\data\graph_experiments\pilot_qwen_nemo_v1
-uv run python .\run_graph_experiment.py --model-mode local --output-dir .\data\graph_experiments\no_complaint_phq9_qwen_nemo_v1
+```bash
+ollama pull qwen2.5:7b
+ollama pull qwen2.5:14b
+ollama pull mistral-nemo
+uv run python run_graph_experiment.py --model-mode local --check
+uv run python run_graph_experiment.py --model-mode local --conditions no_symptoms --repeats 1 --output-dir data/graph_experiments/pilot_qwen_nemo_v1
+uv run python run_graph_experiment.py --model-mode local --output-dir data/graph_experiments/no_complaint_phq9_qwen_nemo_v1
 ```
-
-On Linux, use the [Linux setup and Bash commands](README.md#move-the-work-to-a-linux-laptop).
 
 The preflight checks all required model IDs before creating any run artifacts.
 Run the pilot in its own directory: a design manifest prevents reusing that

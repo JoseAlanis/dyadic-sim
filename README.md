@@ -95,6 +95,12 @@ batch matches its declared design. Declare designs in `config/designs.yaml`
 Clinician rating packages for saved sessions are in `study_web/` (see its
 README).
 
+## Experiments
+
+- `GRAPH_EXPERIMENT.md`: graph-first PHQ-9 round trip (process graph, intake
+  profile, session voiced from the profile, reconstruction).
+- `DIALOGUE_MADRS.md`: fine-tuning MADRS-BERT on patient-only dialogue.
+
 ## Tests
 
 ```bash
