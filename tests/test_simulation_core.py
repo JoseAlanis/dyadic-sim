@@ -46,7 +46,7 @@ V3_META = {
     "patient_id": None,
     "therapist_model": "m",
     "patient_model": "m",
-    "case_name": "power01_afraid_of_dogs_sleep_problems_run_1",
+    "case_name": "afraid_of_dogs_run_1",
     "orientation": "cbt",
     "patient_symptoms": "",
     "patient_symptom_levels": {"sleep_problems": "nearly every day"},
