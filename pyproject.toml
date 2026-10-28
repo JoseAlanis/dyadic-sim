@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
 [project]
 name = "dyadic-sim"
 version = "0.1.0"
@@ -25,6 +29,22 @@ name = "pytorch-cu128"
 url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 
+[project.scripts]
+dyadic-sim = "dyadic_sim.cli:main"
+
+[tool.hatch.build.targets.sdist]
+include = ["dyadic_sim", "config", "tests", "README.md", "LICENSE", "CITATION.cff"]
+
+# Bundled defaults: config/ (models, priors, *.example.yaml) ships inside the
+# wheel; a user's <root>/config/ overrides it file by file. Files go through the
+# normal selection, so anything .gitignore excludes (local designs and spec,
+# generated cases) stays out whichever way the wheel is built.
+[tool.hatch.build.targets.wheel]
+only-include = ["dyadic_sim", "config"]
+
+[tool.hatch.build.targets.wheel.sources]
+"config" = "dyadic_sim/_defaults/config"
+
 [tool.uv.sources]
 torch = { index = "pytorch-cu128" }
 torchvision = { index = "pytorch-cu128" }
@@ -42,15 +62,9 @@ dev = [
 extend-select = ["I", "SIM", "DTZ", "UP", "B"]
 
 [tool.ruff.lint.isort]
-known-first-party = [
-    "agents", "analysis", "memory", "priors", "simulation", "study_web", "symptom_scoring",
-]
+known-first-party = ["dyadic_sim"]
 
 [tool.pytest.ini_options]
-# The repository root must be importable for `analysis`, `simulation` etc.
-# Without this, a bare `pytest` fails at collection and only `PYTHONPATH=. pytest`
-# works, which is an undocumented requirement nobody should have to remember.
-pythonpath = ["."]
 testpaths = ["tests"]
 
 [tool.coverage.run]

@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from dialogue_madrs.data import (
+from dyadic_sim.experiments.dialogue_madrs.data import (
     DialogueSample,
     build_dialogue_samples,
     build_synthetic_workbook_samples,

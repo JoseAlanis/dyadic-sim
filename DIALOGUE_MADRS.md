@@ -1,7 +1,7 @@
 # Patient-dialogue MADRS experiment
 
 This is a separate fine-tuning experiment. It does not change the existing
-`symptom_scoring` pipeline or its `Topic:/Dialogue:/Interviewer:/Patient:` input.
+`dyadic_sim.scoring` pipeline or its `Topic:/Dialogue:/Interviewer:/Patient:` input.
 The new model sees only:
 
 ```text

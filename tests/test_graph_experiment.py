@@ -9,20 +9,24 @@ from types import SimpleNamespace
 
 import pytest
 
-import run_graph_experiment as runner
-import simulation.dyad as dyad_mod
-import simulation.session as session_mod
-from agents.base_agent import AgentResponse
-from graph_experiment.llm import CompletionClient, Models, _parse_json_response
-from graph_experiment.pipeline import (
+import dyadic_sim.cli.run_graph_experiment as runner
+import dyadic_sim.generation.dyad as dyad_mod
+import dyadic_sim.generation.session as session_mod
+from dyadic_sim.cli.run_graph_experiment import selected_conditions
+from dyadic_sim.core.vocabulary import KEYS
+from dyadic_sim.experiments.graph_profile.llm import (
+    CompletionClient,
+    Models,
+    _parse_json_response,
+)
+from dyadic_sim.experiments.graph_profile.pipeline import (
     PROFILE_KEYS,
     construct_graph,
     generate_profiles,
     source_units,
 )
-from priors.patient_prior import PatientPrior
-from run_graph_experiment import selected_conditions
-from symptom_scoring.prior_vocabulary import KEYS
+from dyadic_sim.generation.agents.base_agent import AgentResponse
+from dyadic_sim.generation.priors.patient_prior import PatientPrior
 
 
 class FakeClient:
@@ -450,7 +454,7 @@ def test_the_graph_runner_continues_its_session_with_the_profile_prompt(tmp_path
 
 
 def test_a_graph_session_is_not_continued_by_the_plain_cli(tmp_path, recorded, monkeypatch):
-    import run as run_cli
+    import dyadic_sim.cli.run as run_cli
 
     _graph_session(tmp_path, turns=1)
     session_dir = Path(runner.read_json(tmp_path / "run" / "session.json")["session_dir"])

@@ -1,6 +1,6 @@
 """Rating packages: chronology, blinding, and the return-file contract.
 
-Uses the two synthetic sessions in study_web/fixtures, never a real transcript.
+Uses the two synthetic sessions in tests/fixtures/study_web, never a real transcript.
 """
 
 from __future__ import annotations
@@ -14,14 +14,14 @@ from pathlib import Path
 
 import pytest
 
-from study_web import RETURN_FORMAT, SCHEMA_VERSION, codebook
-from study_web.build_package import BuildError, build
-from study_web.import_returns import run as import_returns
-from study_web.select_sessions import SelectionError, select
-from study_web.snapshot import dialogue, read_session
+from dyadic_sim.study_web import RETURN_FORMAT, SCHEMA_VERSION, codebook
+from dyadic_sim.study_web.build_package import BuildError, build
+from dyadic_sim.study_web.import_returns import run as import_returns
+from dyadic_sim.study_web.select_sessions import SelectionError, select
+from dyadic_sim.study_web.snapshot import dialogue, read_session
 
 REPO = Path(__file__).resolve().parents[2]
-FIXTURES = REPO / "study_web" / "fixtures"
+FIXTURES = REPO / "tests" / "fixtures" / "study_web"
 SLEEP = FIXTURES / "sessions" / "session_20000101_000001_f1a001"
 CONTROL = FIXTURES / "sessions" / "session_20000101_000002_f1a002"
 KEYS = [key for key, _, _ in codebook.SYMPTOMS]
@@ -223,3 +223,18 @@ def test_selector_output_builds(tmp_path):
     assert [p["assignments"] for p in summary["packages"]] == [1, 1]
     excluded = select(selection(exclude_manifest=[tmp_path / "m.json"]))
     assert [s["cell"]["condition"] for s in excluded["sessions"]] == ["no_symptoms"], "excluded sessions stay out"
+
+
+def test_case_names_combine_user_and_bundled_cases(tmp_path, monkeypatch):
+    from dyadic_sim.core import paths
+    from dyadic_sim.study_web import build_package
+
+    cases = tmp_path / "config" / "priors" / "patient" / "cases"
+    cases.mkdir(parents=True)
+    (cases / "my_custom_case.yaml").write_text("presenting_complaint: x\n")
+    monkeypatch.setattr(paths, "USER_CONFIG", str(tmp_path / "config"))
+
+    names = build_package.case_names()
+    assert "my_custom_case" in names and "no_complaint" in names
+    # a run prefix in front of a bundled case is still found, so blinding still rejects it
+    assert build_package.run_prefix("myrun_no_complaint_sleep_problems_run_1", names) == "myrun"

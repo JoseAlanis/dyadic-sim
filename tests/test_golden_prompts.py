@@ -1,7 +1,7 @@
 """Golden hashes of every system prompt the generator can render, and the opening.
 
-The restructure (moving `priors/`, `simulation/` and the runner into one package)
-must not change a byte of what the agents are told. Each hand-written case is
+Moving or reorganising code must not change a byte of what the agents are
+told. Each hand-written case is
 rendered as the batch runner renders it: without symptoms, and with each of the
 nine PHQ-9 symptoms at "nearly every day" under both injection schemes. Every
 therapist variant is rendered too. Their SHA-256 are pinned in
@@ -20,12 +20,15 @@ import json
 import os
 from pathlib import Path
 
-from priors import patient_prior
-from priors.loader import load_patient_case
-from priors.therapist_prior import build_therapist_prior
-from run_symptom_experiments import build_no_symptoms_case, build_single_symptom_case
-from simulation.opening import FIRST_SESSION_OPENING
-from symptom_scoring.prior_vocabulary import KEYS
+from dyadic_sim.cli.run_symptom_experiments import (
+    build_no_symptoms_case,
+    build_single_symptom_case,
+)
+from dyadic_sim.core.vocabulary import KEYS
+from dyadic_sim.generation.opening import FIRST_SESSION_OPENING
+from dyadic_sim.generation.priors import patient_prior
+from dyadic_sim.generation.priors.loader import load_patient_case
+from dyadic_sim.generation.priors.therapist_prior import build_therapist_prior
 
 GOLDEN = Path(__file__).parent / "golden" / "prompts.json"
 PRIORS = Path(__file__).resolve().parents[1] / "config" / "priors"

@@ -1,22 +1,13 @@
 """One PHQ-9 vocabulary, imported everywhere, pinned here.
 
-The 9 keys and their prompt labels used to be copy-pasted into five places:
-`priors/patient_prior.py`, `symptom_scoring/config.py`, `run_symptom_experiments.py`,
-and twice inside `analysis/validation/symptom_embed_robust.py` (REF_A, REF_B).
-They all agreed, and nothing made them agree.
-
-`symptom_scoring/prior_vocabulary.py` is now the single home, holding all three registers -
-KEYS, LABELS (prompt wording) and REFERENCES (analysis probes). LABELS and
-REFERENCES are deliberately NOT unified with each other: symptom_embed_robust
-compares them, so merging them would make it correlate a variable with itself.
-
-That is the same shape as the bug that has already bitten four times in this
-repo: a hardcoded list copied next to the thing that needs it, then a tenth case
-or a renamed key arrives and one copy silently goes stale. The dangerous copy
-here was REF_A: `symptom_embed_robust.py` exists to check whether the measure in
-`symptom_embed.py` survives a change of reference wording, so if its copy of the
-reference sentences drifted, it would compare the new wording against a stale
-one and still report high agreement.
+`dyadic_sim/core/vocabulary.py` is the single home of the PHQ-9 keys and
+their three registers: KEYS, LABELS (prompt wording) and REFERENCES (analysis
+probes). The prior, the scoring config, the batch runner and
+`symptom_embed_robust.py` all import it. LABELS and REFERENCES are deliberately
+not unified: `symptom_embed_robust.py` checks whether the measure in
+`symptom_embed.py` survives a change of reference wording, so merging them would
+make it correlate a variable with itself, and a local copy of the references
+would let it compare new wording against stale wording and still agree.
 
 These tests fail if anyone reintroduces a local copy, or unifies the two
 registers that must stay distinct.
@@ -28,14 +19,14 @@ from __future__ import annotations
 
 import inspect
 
-from analysis.validation import symptom_embed_robust as robust
-from analysis.validation.symptom_embed import REFERENCES
-from analysis.validation.symptom_lexicon import PHQ9
-from priors import patient_prior
-from run_symptom_experiments import SYMPTOM_KEYS
-from symptom_scoring.config import PHQ_SYMPTOM_LABELS
-from symptom_scoring.instruments.madrs import PHQ_MAPPING_QUALITY, PHQ_TO_TOPIC
-from symptom_scoring.prior_vocabulary import KEYS, LABELS
+from dyadic_sim.analysis import symptom_embed_robust as robust
+from dyadic_sim.analysis.symptom_embed import REFERENCES
+from dyadic_sim.analysis.symptom_lexicon import PHQ9
+from dyadic_sim.cli.run_symptom_experiments import SYMPTOM_KEYS
+from dyadic_sim.core.vocabulary import KEYS, LABELS
+from dyadic_sim.generation.priors import patient_prior
+from dyadic_sim.scoring.config import PHQ_SYMPTOM_LABELS
+from dyadic_sim.scoring.instruments.madrs import PHQ_MAPPING_QUALITY, PHQ_TO_TOPIC
 
 CANONICAL = list(PHQ_SYMPTOM_LABELS)
 

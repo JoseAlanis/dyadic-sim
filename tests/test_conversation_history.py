@@ -15,14 +15,14 @@ from itertools import pairwise
 
 import pytest
 
-import simulation.dyad as dyad_mod
-import simulation.session as session_mod
-from agents.base_agent import AgentResponse, BaseAgent
-from priors.patient_prior import PatientPrior
-from simulation.dyad import Dyad
-from simulation.opening import FIRST_SESSION_OPENING
-from simulation.session import resume_session
-from simulation.utterance import GENERATION_VERSION
+import dyadic_sim.generation.dyad as dyad_mod
+import dyadic_sim.generation.session as session_mod
+from dyadic_sim.generation.agents.base_agent import AgentResponse, BaseAgent
+from dyadic_sim.generation.dyad import Dyad
+from dyadic_sim.generation.opening import FIRST_SESSION_OPENING
+from dyadic_sim.generation.priors.patient_prior import PatientPrior
+from dyadic_sim.generation.session import resume_session
+from dyadic_sim.generation.utterance import GENERATION_VERSION
 
 CASE = "no_complaint"
 OPENING = FIRST_SESSION_OPENING

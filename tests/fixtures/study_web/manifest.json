@@ -1,0 +1,27 @@
+{
+ "study_version": "fixture",
+ "protocol_version": "draft-0",
+ "description": "Synthetic fixture for tests: two hand-written sessions, no real transcript.",
+ "seed": 1,
+ "raters": [
+  "R1",
+  "R2"
+ ],
+ "sessions": [
+  {
+   "path": "tests/fixtures/study_web/sessions/session_20000101_000001_f1a001",
+   "set": "shared"
+  },
+  {
+   "path": "tests/fixtures/study_web/sessions/session_20000101_000002_f1a002",
+   "set": "shared"
+  }
+ ],
+ "repeats": [
+  {
+   "path": "tests/fixtures/study_web/sessions/session_20000101_000001_f1a001",
+   "rater": "R1",
+   "set": "repeat"
+  }
+ ]
+}

@@ -93,7 +93,7 @@ ratings are aggregated per session. Pin checkpoints with `--model-revision` and
 
 ## Analyse a batch
 
-`analysis/validation/` compares injected conditions with controls within a
+`dyadic_sim/analysis/` compares injected conditions with controls within a
 batch: a negation-aware symptom lexicon, an embedding measure, and checks that a
 batch matches its declared design. Declare designs in `config/designs.yaml`
 (start from `config/designs.example.yaml`). Each script documents its use under
@@ -117,6 +117,8 @@ uv run ruff check .
 
 `uv run pytest --cov` adds a coverage table per file; `uv run coverage html`
 then writes a browsable report to `htmlcov/`.
+`tests/packaging/check_installed_wheel.sh` builds the wheel, installs it into a
+fresh environment and uses it from outside the repository.
 
 ## License
 

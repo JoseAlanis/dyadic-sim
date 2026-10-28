@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from study_web.build_package import build
-from study_web.import_returns import run as import_returns
+from dyadic_sim.study_web.build_package import build
+from dyadic_sim.study_web.import_returns import run as import_returns
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -28,7 +28,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_browser_round_trip(tmp_path):
-    summary = build(REPO / "study_web" / "fixtures" / "manifest.json", tmp_path)
+    summary = build(REPO / "tests" / "fixtures" / "study_web" / "manifest.json", tmp_path)
     study = Path(summary["study_dir"])
     downloads = tmp_path / "downloads"
     downloads.mkdir()

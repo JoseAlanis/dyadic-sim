@@ -25,12 +25,12 @@ import pytest
 
 pytest.importorskip("sentence_transformers")
 
-from analysis.embeddings import EMBEDDINGS_AVAILABLE, get_model
+from dyadic_sim.analysis.embeddings import EMBEDDINGS_AVAILABLE, get_model
 
 # Imported, never redefined. A tested chunker that production could not call was
 # the reason truncation survived the first round of fixes: the implementation
 # under test and the implementation in use were different code.
-from analysis.validation.sessions import chunk_by_tokens, n_tokens
+from dyadic_sim.analysis.sessions import chunk_by_tokens, n_tokens
 
 
 @pytest.fixture(scope="module")

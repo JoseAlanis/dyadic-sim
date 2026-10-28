@@ -20,13 +20,15 @@ import os
 import pytest
 import yaml
 
-from analysis.validation.lexicon_detect import has_third_party_subject, is_negated
-from analysis.validation.symptom_lexicon import MADRS, PHQ9
+from dyadic_sim.analysis.lexicon_detect import has_third_party_subject, is_negated
+from dyadic_sim.analysis.symptom_lexicon import MADRS, PHQ9
+from dyadic_sim.core import paths
 
-CASES_DIR = os.path.join("config", "priors", "patient", "cases")
+# The user's config/ first, then the bundled defaults, as the generator resolves them.
+CASE_DIRS = paths.config_dirs("priors", "patient", "cases")
 
 #: Fields passed to the patient agent. Any other top-level key in a case file is
-#: ignored by priors/patient_prior.py, so it cannot leak vocabulary into speech
+#: ignored by dyadic_sim/generation/priors/patient_prior.py, so it cannot leak vocabulary into speech
 #: and is not linted.
 PATIENT_VISIBLE = (
     "presenting_complaint",
@@ -57,11 +59,14 @@ KNOWN_CONTAMINATED = {
 
 
 def _case_files():
-    for path in sorted(glob.glob(os.path.join(CASES_DIR, "*.yaml"))):
-        name = os.path.basename(path)[: -len(".yaml")]
-        if name.startswith("_") or "_run_" in name:
-            continue          # template, and generated per-condition cases
-        yield name, path
+    seen = set()
+    for directory in CASE_DIRS:
+        for path in sorted(glob.glob(os.path.join(directory, "*.yaml"))):
+            name = os.path.basename(path)[: -len(".yaml")]
+            if name.startswith("_") or "_run_" in name or name in seen:
+                continue          # template, generated per-condition cases, shadowed defaults
+            seen.add(name)
+            yield name, path
 
 
 def _load(path: str) -> dict:
@@ -124,7 +129,7 @@ def test_known_contaminated_cases_still_are(name):
     clean, this test FAILS to remind them to move it out of KNOWN_CONTAMINATED -
     and any result computed on the old wording is no longer comparable.
     """
-    path = os.path.join(CASES_DIR, f"{name}.yaml")
+    path = paths.config_path("priors", "patient", "cases", f"{name}.yaml")
     assert not detector_hits(_visible_text(path))
 
 

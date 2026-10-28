@@ -1,4 +1,7 @@
-from dialogue_madrs.metrics import evaluation_report, regression_metrics
+from dyadic_sim.experiments.dialogue_madrs.metrics import (
+    evaluation_report,
+    regression_metrics,
+)
 
 
 def test_regression_metrics_include_required_measures():

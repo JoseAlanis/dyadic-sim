@@ -1,4 +1,4 @@
-# Analysis specification read by analysis/validation/spec.py and rerun.py.
+# Analysis specification read by dyadic_sim/analysis/spec.py and rerun.py.
 #
 # Copy to config/analysis_spec.yaml, which is local and not tracked, and fix it
 # before the sessions it will judge exist. It pins the analysis parameters, the

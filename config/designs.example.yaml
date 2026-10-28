@@ -1,7 +1,7 @@
 # Design declarations: what each batch (one run prefix) is supposed to contain.
 #
 # Copy to config/designs.yaml, which is local and not tracked, and declare each
-# batch before generating it. analysis/validation/design.py compares what is on
+# batch before generating it. dyadic_sim/analysis/design.py compares what is on
 # disk with the declaration and reports separately:
 #
 #   missing      cells with fewer runs than declared

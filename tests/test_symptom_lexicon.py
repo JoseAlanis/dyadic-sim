@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import pytest
 
-from analysis.validation.lexicon_detect import is_negated
-from analysis.validation.symptom_lexicon import MADRS, PHQ9
+from dyadic_sim.analysis.lexicon_detect import is_negated
+from dyadic_sim.analysis.symptom_lexicon import MADRS, PHQ9
 
 # ---------------------------------------------------------------------------
 # Must fire: genuine, self-attributed symptom statements.
@@ -173,7 +173,7 @@ def test_third_party_symptom_is_suppressed(symptom, text):
     """A symptom belonging to someone else is not the patient's symptom."""
     import re
 
-    from analysis.validation.lexicon_detect import has_third_party_subject
+    from dyadic_sim.analysis.lexicon_detect import has_third_party_subject
 
     match = PHQ9[symptom].pattern().search(text)
     assert match is not None, f"expected a raw match to suppress in {text!r}"
@@ -187,7 +187,7 @@ def test_third_party_symptom_is_suppressed(symptom, text):
 @pytest.mark.parametrize(("symptom", "text"), RECLAIMED_SHOULD_FIRE)
 def test_first_person_survives_a_third_party_mention(symptom, text):
     """"My wife says I don't enjoy anything" is still the patient's symptom."""
-    from analysis.validation.lexicon_detect import has_third_party_subject
+    from dyadic_sim.analysis.lexicon_detect import has_third_party_subject
 
     match = PHQ9[symptom].pattern().search(text)
     assert match is not None, f"{symptom} missed: {text!r}"
@@ -335,7 +335,7 @@ REPLY_CLASSES = [
 
 @pytest.mark.parametrize(("text", "expected"), REPLY_CLASSES)
 def test_reply_polarity_classes(text, expected):
-    from analysis.validation.lexicon_detect import classify_reply
+    from dyadic_sim.analysis.lexicon_detect import classify_reply
 
     assert classify_reply(text) == expected
 
@@ -362,7 +362,7 @@ OBSERVED_FALSE_CONFIRMATIONS = [
 
 @pytest.mark.parametrize("reply", OBSERVED_FALSE_CONFIRMATIONS)
 def test_observed_false_confirmations_are_not_affirmative(reply):
-    from analysis.validation.lexicon_detect import classify_reply
+    from dyadic_sim.analysis.lexicon_detect import classify_reply
 
     assert classify_reply(reply) != "affirmative", (
         "a reply that only opens like an endorsement must not license attributing "
@@ -380,7 +380,7 @@ SHORT_VALID_CONFIRMATIONS = [
 @pytest.mark.parametrize("reply", SHORT_VALID_CONFIRMATIONS)
 def test_short_unambiguous_endorsements_still_confirm(reply):
     """Narrowing must not cost the replies the mechanism exists for."""
-    from analysis.validation.lexicon_detect import classify_reply
+    from dyadic_sim.analysis.lexicon_detect import classify_reply
 
     assert classify_reply(reply) == "affirmative", reply
 
@@ -392,7 +392,7 @@ def test_endorsement_that_runs_on_is_not_a_confirmation():
     A long reply that does carry some is already caught by direct detection, so
     refusing to guess at the topic of a paragraph costs nothing.
     """
-    from analysis.validation.lexicon_detect import classify_reply
+    from dyadic_sim.analysis.lexicon_detect import classify_reply
 
     assert classify_reply("Yes.") == "affirmative"
     assert classify_reply(
@@ -405,7 +405,7 @@ def test_endorsement_that_runs_on_is_not_a_confirmation():
                                    "I suppose so."])
 def test_hedges_are_uncertain_not_affirmative(reply):
     """Retained as rejected evidence rather than discarded or counted."""
-    from analysis.validation.lexicon_detect import classify_reply
+    from dyadic_sim.analysis.lexicon_detect import classify_reply
 
     assert classify_reply(reply) == "uncertain", reply
 
@@ -420,9 +420,9 @@ def test_negative_or_hedged_reply_is_not_a_confirmation(reply):
     reflective therapist asks a great many yes/no questions, so this inflated
     precisely the cells where the therapist probed hardest.
     """
-    from analysis.validation.lexicon_detect import detect_session
-    from analysis.validation.symptom_lexicon import PHQ9_PATTERNS
-    from symptom_scoring.types import TurnPair
+    from dyadic_sim.analysis.lexicon_detect import detect_session
+    from dyadic_sim.analysis.symptom_lexicon import PHQ9_PATTERNS
+    from dyadic_sim.scoring.types import TurnPair
 
     pair = TurnPair(turn_index=1, therapist_text="Have you had trouble sleeping?",
                     patient_text=reply)
@@ -434,9 +434,9 @@ def test_negative_or_hedged_reply_is_not_a_confirmation(reply):
 
 @pytest.mark.parametrize("reply", ["Yes, constantly.", "Sometimes.", "A bit, yeah."])
 def test_affirmative_reply_still_confirms(reply):
-    from analysis.validation.lexicon_detect import detect_session
-    from analysis.validation.symptom_lexicon import PHQ9_PATTERNS
-    from symptom_scoring.types import TurnPair
+    from dyadic_sim.analysis.lexicon_detect import detect_session
+    from dyadic_sim.analysis.symptom_lexicon import PHQ9_PATTERNS
+    from dyadic_sim.scoring.types import TurnPair
 
     pair = TurnPair(turn_index=1, therapist_text="Have you had trouble sleeping?",
                     patient_text=reply)
@@ -458,9 +458,9 @@ def test_valid_match_after_a_rejected_one_still_fires(symptom, text):
     `search()` returned only the leftmost match, so a negated or third-party
     mention hid any valid self-report following it.
     """
-    from analysis.validation.lexicon_detect import detect_session
-    from analysis.validation.symptom_lexicon import PHQ9_PATTERNS
-    from symptom_scoring.types import TurnPair
+    from dyadic_sim.analysis.lexicon_detect import detect_session
+    from dyadic_sim.analysis.symptom_lexicon import PHQ9_PATTERNS
+    from dyadic_sim.scoring.types import TurnPair
 
     pair = TurnPair(turn_index=1, therapist_text="", patient_text=text)
     det = detect_session([pair], {symptom: PHQ9_PATTERNS[symptom]})[symptom]
@@ -500,9 +500,9 @@ PREDICATE_END_TO_END = [
 
 @pytest.mark.parametrize(("text", "detected", "refused_by"), PREDICATE_END_TO_END)
 def test_predicate_frame_through_the_full_scanner(text, detected, refused_by):
-    from analysis.validation.lexicon_detect import detect_session
-    from analysis.validation.symptom_lexicon import PHQ9, PHQ9_PATTERNS
-    from symptom_scoring.types import TurnPair
+    from dyadic_sim.analysis.lexicon_detect import detect_session
+    from dyadic_sim.analysis.symptom_lexicon import PHQ9, PHQ9_PATTERNS
+    from dyadic_sim.scoring.types import TurnPair
 
     pair = TurnPair(turn_index=1, therapist_text="", patient_text=text)
     det = detect_session([pair], {"sleep_problems": PHQ9_PATTERNS["sleep_problems"]},
@@ -564,9 +564,9 @@ MOOD_NOT_SOMATIC = [                      # the same metaphor, reported as a sta
 
 @pytest.mark.parametrize("text", SOMATIC_NOT_MOOD)
 def test_shared_metaphor_in_a_panic_sentence_is_not_low_mood(text):
-    from analysis.validation.lexicon_detect import detect_session
-    from analysis.validation.symptom_lexicon import PHQ9_PATTERNS
-    from symptom_scoring.types import TurnPair
+    from dyadic_sim.analysis.lexicon_detect import detect_session
+    from dyadic_sim.analysis.symptom_lexicon import PHQ9_PATTERNS
+    from dyadic_sim.scoring.types import TurnPair
 
     pair = TurnPair(turn_index=1, therapist_text="", patient_text=text)
     det = detect_session([pair], {"depressed_mood": PHQ9_PATTERNS["depressed_mood"]},
@@ -577,9 +577,9 @@ def test_shared_metaphor_in_a_panic_sentence_is_not_low_mood(text):
 
 @pytest.mark.parametrize("text", MOOD_NOT_SOMATIC)
 def test_shared_metaphor_reported_as_a_state_still_fires(text):
-    from analysis.validation.lexicon_detect import detect_session
-    from analysis.validation.symptom_lexicon import PHQ9_PATTERNS
-    from symptom_scoring.types import TurnPair
+    from dyadic_sim.analysis.lexicon_detect import detect_session
+    from dyadic_sim.analysis.symptom_lexicon import PHQ9_PATTERNS
+    from dyadic_sim.scoring.types import TurnPair
 
     pair = TurnPair(turn_index=1, therapist_text="", patient_text=text)
     assert detect_session([pair], {"depressed_mood": PHQ9_PATTERNS["depressed_mood"]},
@@ -629,7 +629,7 @@ def test_somatic_guard_touches_only_the_shared_metaphor():
     sentence with no shared metaphor in it is unaffected, and other symptoms
     firing inside such a sentence are unaffected.
     """
-    from analysis.validation.lexicon_detect import is_somatic_not_mood
+    from dyadic_sim.analysis.lexicon_detect import is_somatic_not_mood
 
     # panic context, but no shared metaphor -> guard must not engage
     s = "My heart is racing and I can't breathe, and I've been feeling really down."
@@ -645,7 +645,7 @@ def _prefix_only(lex):
     Reconstructed from the same term tuples rather than hardcoded, so the
     comparison cannot drift out of date when vocabulary changes later.
     """
-    from analysis.validation.symptom_lexicon import SymptomLexicon
+    from dyadic_sim.analysis.symptom_lexicon import SymptomLexicon
 
     return SymptomLexicon(
         self_framed=lex.self_framed,
@@ -671,14 +671,14 @@ def test_predicate_frame_adds_no_false_positives_on_the_hard_negatives():
     import json
     import pathlib
 
-    from analysis.validation.lexicon_detect import (
+    from dyadic_sim.analysis.lexicon_detect import (
         has_third_party_subject,
         is_negated,
     )
-    from analysis.validation.symptom_lexicon import PHQ9
+    from dyadic_sim.analysis.symptom_lexicon import PHQ9
 
     path = (pathlib.Path(__file__).resolve().parents[1]
-            / "analysis" / "validation" / "exemplars" / "negatives.jsonl")
+            / "dyadic_sim" / "analysis" / "exemplars" / "negatives.jsonl")
     if not path.exists():                                    # pragma: no cover
         pytest.skip("a-priori negative pool not present")
     negatives = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]

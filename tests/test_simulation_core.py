@@ -15,10 +15,10 @@ import json
 
 import pytest
 
-import simulation.session as session_mod
-from priors import patient_prior
-from simulation.session import TurnRecord, new_session, resume_session
-from simulation.utterance import GENERATION_VERSION
+import dyadic_sim.generation.session as session_mod
+from dyadic_sim.generation.priors import patient_prior
+from dyadic_sim.generation.session import TurnRecord, new_session, resume_session
+from dyadic_sim.generation.utterance import GENERATION_VERSION
 
 # A transcript row exactly as generation_version 3 wrote it, including the two
 # fields version 4 no longer has.
