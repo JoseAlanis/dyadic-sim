@@ -18,6 +18,7 @@ import pytest
 import simulation.dyad as dyad_mod
 import simulation.session as session_mod
 from agents.base_agent import AgentResponse, BaseAgent
+from priors.patient_prior import PatientPrior
 from simulation.dyad import Dyad
 from simulation.opening import FIRST_SESSION_OPENING
 from simulation.session import resume_session
@@ -228,6 +229,17 @@ def test_a_session_without_its_opening_is_not_continued(sessions_dir, monkeypatc
 
     with pytest.raises(session_mod.IncompatibleSessionError, match="opening"):
         _dyad(session_id="session_no_opening")
+
+    assert _snapshot(record) == before
+
+
+def test_a_case_session_is_not_continued_with_a_supplied_prior(sessions_dir, monkeypatch):
+    record = _write_record(sessions_dir / "session_case", GENERATION_VERSION)
+    before = _snapshot(record)
+    monkeypatch.setattr(dyad_mod, "build_agent", lambda model, role: pytest.fail("agent built"))
+
+    with pytest.raises(session_mod.IncompatibleSessionError, match="supplied patient prior"):
+        _dyad(session_id="session_case", patient_prior=PatientPrior(case_name=CASE))
 
     assert _snapshot(record) == before
 

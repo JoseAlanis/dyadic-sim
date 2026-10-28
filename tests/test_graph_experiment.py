@@ -401,3 +401,67 @@ def test_batch_writes_two_linked_sessions_and_resumes(tmp_path, monkeypatch):
     for pointer in output.glob("no_symptoms/run_01/profile_*/session.json"):
         session_dir = runner.read_json(pointer)["session_dir"]
         assert len((Path(session_dir) / "transcript.jsonl").read_text().splitlines()) == 2
+
+
+class PromptRecorder:
+    """Stub dialogue agent that keeps every system prompt it is sent."""
+
+    def __init__(self, model, role):
+        self.model, self.role, self.system_prompts = model, role, []
+
+    def complete(self, system_prompt, messages, **kwargs):
+        self.system_prompts.append(system_prompt)
+        return AgentResponse(content=f"{self.role} {len(messages)}", model=self.model)
+
+
+def _graph_session(tmp_path, turns):
+    """Run (or continue) one graph-profile dialogue through the runner's own path."""
+    profile = {key: f"PROFILE {key}" for key in PROFILE_KEYS}
+    return runner._run_dialogue(profile, tmp_path / "graph.json", "no_symptoms", 1, 1,
+                                tmp_path / "run", Models(dialogue="stub"), "cbt", turns, 64)
+
+
+@pytest.fixture
+def recorded(tmp_path, monkeypatch):
+    built: list[PromptRecorder] = []
+
+    def build(model, role):
+        built.append(PromptRecorder(model, role))
+        return built[-1]
+
+    monkeypatch.setattr(dyad_mod, "build_agent", build)
+    monkeypatch.setattr(session_mod, "SESSIONS_DIR", tmp_path / "sessions")
+    return built
+
+
+def test_the_graph_runner_continues_its_session_with_the_profile_prompt(tmp_path, recorded):
+    _graph_session(tmp_path, turns=1)
+    saved = _graph_session(tmp_path, turns=3)
+
+    assert [row["turn"] for row in saved] == [1, 2, 3]
+    resumed_patient = [agent for agent in recorded if agent.role == "patient"][-1]
+    assert len(resumed_patient.system_prompts) == 2
+    for prompt in resumed_patient.system_prompts:
+        assert "## Your Intake Profile" in prompt and "PROFILE presenting_problem" in prompt
+    session_dir = Path(runner.read_json(tmp_path / "run" / "session.json")["session_dir"])
+    meta = runner.read_json(session_dir / "metadata.json")
+    assert meta["patient_prompt_source"] == "graph_derived_profile_only"
+    assert meta["turn_count"] == 3
+
+
+def test_a_graph_session_is_not_continued_by_the_plain_cli(tmp_path, recorded, monkeypatch):
+    import run as run_cli
+
+    _graph_session(tmp_path, turns=1)
+    session_dir = Path(runner.read_json(tmp_path / "run" / "session.json")["session_dir"])
+    before = {p.name: p.read_bytes() for p in sorted(session_dir.iterdir())}
+    monkeypatch.setattr(dyad_mod, "build_agent",
+                        lambda *args: pytest.fail("agent built for a session that must not continue"))
+    monkeypatch.setattr(sys, "argv", ["run.py", "--resume", str(session_dir),
+                                      "--additional-turns", "2"])
+
+    with pytest.raises(SystemExit) as stop:
+        run_cli.main()
+
+    assert stop.value.code == 1
+    assert {p.name: p.read_bytes() for p in sorted(session_dir.iterdir())} == before

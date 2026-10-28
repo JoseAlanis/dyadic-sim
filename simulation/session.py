@@ -75,6 +75,7 @@ class Session:
             conversation_language: str = "en",
             initial_patient_prompt: str | None = None,
             generation_version: int | None = GENERATION_VERSION,
+            patient_prompt_source: str | None = None,
     ):
         self.session_id = session_id
         self.therapist_model = therapist_model
@@ -90,6 +91,10 @@ class Session:
         # one; a resumed session keeps what its metadata says (None = absent =
         # version 1), and saving never overwrites it.
         self.generation_version = generation_version
+        # Where the patient prompt came from when it was not the case file named
+        # by case_name (None). Read from the record; written only through
+        # save_metadata(extra), so a caller's more specific label is kept.
+        self.patient_prompt_source = patient_prompt_source
         self.turn_count = 0
         self.transcript: list[TurnRecord] = []
         self.created_at = datetime.now(UTC).replace(tzinfo=None).isoformat()
@@ -411,6 +416,7 @@ def resume_session(session_id: str) -> Session:
         conversation_language=meta.get("conversation_language", "en"),
         initial_patient_prompt=meta.get("initial_patient_prompt"),
         generation_version=meta.get("generation_version"),
+        patient_prompt_source=meta.get("patient_prompt_source"),
     )
 
     # Replay transcript
@@ -435,13 +441,16 @@ class IncompatibleSessionError(RuntimeError):
     """A saved session that the current generator must not continue."""
 
 
-def check_continuable(session: Session) -> None:
+def check_continuable(session: Session, prior_supplied: bool = False) -> None:
     """Refuse to continue a session that the current generator did not start.
 
     Appending turns under another generation contract would mix two stimuli in
     one transcript. Records from other versions stay readable (resume_session,
-    the scoring pipeline, the analyses); they only cannot grow. Call before any
-    agent is built or anything is written.
+    the scoring pipeline, the analyses); they only cannot grow. The same holds
+    for the patient prompt: a session started from a supplied prior continues
+    only when the caller supplies a prior again, and a session built from its
+    case file only when it does not. Call before any agent is built or anything
+    is written.
     """
     recorded = session.generation_version
     if recorded != GENERATION_VERSION:
@@ -455,5 +464,16 @@ def check_continuable(session: Session) -> None:
         raise IncompatibleSessionError(
             f"{session.session_id} has no saved opening (initial_patient_prompt), "
             "so its conversation cannot be rebuilt."
+        )
+    if bool(session.patient_prompt_source) != prior_supplied:
+        if prior_supplied:
+            raise IncompatibleSessionError(
+                f"{session.session_id} was built from case {session.case_name!r}; "
+                "it cannot continue with a supplied patient prior."
+            )
+        raise IncompatibleSessionError(
+            f"{session.session_id} was generated from a supplied patient prompt "
+            f"({session.patient_prompt_source}), not from case {session.case_name!r}; "
+            "continue it with the runner that supplied it."
         )
 

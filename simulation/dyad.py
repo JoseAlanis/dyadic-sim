@@ -33,12 +33,13 @@ class Dyad:
         patient_prior: PatientPrior | None = None,
     ):
         # A saved session is checked before anything is built, written or sent:
-        # one from another generator version must not grow (see
-        # simulation/session.py, check_continuable).
+        # one from another generator version, or one whose patient prompt the
+        # caller cannot rebuild, must not grow (simulation/session.py,
+        # check_continuable).
         resumed = None
         if session_id:
             resumed = resume_session(session_id)
-            check_continuable(resumed)
+            check_continuable(resumed, prior_supplied=patient_prior is not None)
 
         # Build priors
         self.therapist_prior: TherapistPrior = build_therapist_prior(orientation)
@@ -68,6 +69,10 @@ class Dyad:
                 conversation_language="en",
                 initial_patient_prompt=opening_utterance(),
             )
+            if patient_prior is not None:
+                # Marks the record so a plain resume cannot rebuild it from case_name.
+                self.session.patient_prompt_source = "supplied"
+                self.session.save_metadata({"patient_prompt_source": "supplied"})
 
     def run(self, n_turns: int = 10, max_tokens: int = 300) -> Session:
         """
