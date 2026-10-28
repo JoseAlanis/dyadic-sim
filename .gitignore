@@ -6,10 +6,13 @@
 
 # Per-condition case YAMLs written by run_symptom_experiments.py. It always
 # names them "<prefix>_<case>_<symptom>_run_<n>.yaml", so matching on _run_
-# covers every prefix without listing them, and admits hand-written cases
-# automatically. (An earlier version re-admitted cases by name and silently
-# swallowed the next new one.)
+# covers every prefix and admits hand-written cases automatically.
 config/priors/patient/cases/*_run_*.yaml
+
+# Local design declarations and analysis specification; start from the
+# matching *.example.yaml.
+config/designs.yaml
+config/analysis_spec.yaml
 
 # uv / python
 .venv/
@@ -18,18 +21,15 @@ __pycache__/
 *.pyo
 .python-version
 
-# Batch-generation console logs. They belong in data/results/_logs/ (already
-# covered by data/* below), but a `nohup ... > run.log` launched from the repo
-# root writes to the CWD, so an unqualified redirect lands here instead. Ignored
-# wherever they appear: they are heavy, regenerable, and a session's real record
-# is its own directory under data/sessions/.
+# Batch-generation console logs, wherever a redirect leaves them. A session's
+# record is its own directory under data/sessions/.
 *.log
 
-# All of data/ is ignored: raw sessions and derived outputs are heavy and
-# regenerable.
+# Sessions and derived outputs: heavy and regenerable.
 data/*
-manuscript/
 
+# Local working notes.
+manuscript/
 
 # streamlit
 .streamlit/
@@ -37,9 +37,3 @@ manuscript/
 # OS
 .DS_Store
 Thumbs.db
-
-# Working notes and papers now live under manuscript/ (ignored wholesale above):
-# VALIDATION.md, CODE_FINDINGS.md, resources/, _archive/
-analysis/ANALYSIS.md
-AUDIT.md
-REVIEW_RECOMENDATIONS.md

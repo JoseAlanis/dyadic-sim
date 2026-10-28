@@ -1,15 +1,15 @@
 """Load the frozen analysis specification and evaluate results against it.
 
-`config/analysis_spec.yaml` fixes the parameters, the estimand, the obligatory
-sensitivities and what counts as evidence. This module reads it and applies the
-criteria, so the verdict on a cell comes from the declared rule rather than from
-whichever number looked best.
+`config/analysis_spec.yaml` (local; start from `config/analysis_spec.example.yaml`)
+fixes the parameters, the estimand, the obligatory sensitivities and what counts
+as evidence. This module reads it and applies the criteria, so the verdict on a
+cell comes from the declared rule rather than from whichever number looked best.
 
-The criteria are conjunctive on purpose. In power01 `psychomotor_changes` has a
-LARGER lexicon lift than `sleep_problems` (+17pp vs +14pp) and should still not
-count: it leaks into the sleep arm (+6pp) and the embedding sees nothing
-(d=0.11). A magnitude-only rule admits it. That is the whole argument for
-requiring magnitude AND specificity AND agreement in direction.
+The criteria are conjunctive on purpose. A symptom can show a larger lexicon lift
+than another and still not count, because its detector also rises in arms where
+a different symptom was injected, or the embedding does not move. A
+magnitude-only rule would admit it; magnitude AND specificity AND agreement in
+direction does not.
 """
 
 from __future__ import annotations
@@ -22,6 +22,11 @@ SPEC_PATH = os.path.join("config", "analysis_spec.yaml")
 
 
 def load(path: str = SPEC_PATH) -> dict:
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"{path} not found. Copy config/analysis_spec.example.yaml to "
+            f"{SPEC_PATH} and fix it before analysing."
+        )
     with open(path, encoding="utf-8") as handle:
         return yaml.safe_load(handle)
 

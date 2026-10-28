@@ -1,0 +1,38 @@
+# Design declarations: what each batch (one run prefix) is supposed to contain.
+#
+# Copy to config/designs.yaml, which is local and not tracked, and declare each
+# batch before generating it. analysis/validation/design.py compares what is on
+# disk with the declaration and reports separately:
+#
+#   missing      cells with fewer runs than declared
+#   unexpected   sessions under a prefix that has no declaration
+#   extra        valid runs beyond `runs`, kept or not according to `inclusion`
+#
+# Keys read by the check:
+#
+#   cases        patient cases in the batch
+#   conditions   `no_symptoms` and/or PHQ-9 symptom keys
+#   runs         one integer for every cell, or a mapping case -> integer when
+#                cases are sized differently (a case missing from the mapping
+#                is an error)
+#   inclusion    all_valid: every completed run counts, including runs beyond
+#                `runs`; first_n: only runs 1..runs belong, later runs are
+#                reported as extras
+#
+# The remaining keys record how the batch was generated. Batches generated at
+# different `generation_version`s are not comparable and must not share a
+# prefix.
+
+example01:
+  description: >
+    Five control sessions on one case, to read the case's base rates before
+    injecting anything.
+  cases: [no_complaint]
+  conditions: [no_symptoms]
+  runs: 5
+  therapist_model: mistral-nemo
+  patient_model: mistral-nemo
+  generation_version: 6
+  injection: active_only
+  turns: 10
+  inclusion: all_valid

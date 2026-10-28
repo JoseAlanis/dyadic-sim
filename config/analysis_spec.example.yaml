@@ -1,0 +1,114 @@
+# Analysis specification read by analysis/validation/spec.py and rerun.py.
+#
+# Copy to config/analysis_spec.yaml, which is local and not tracked, and fix it
+# before the sessions it will judge exist. It pins the analysis parameters, the
+# estimand, the sensitivities that must be run, and what counts as evidence for
+# an injected symptom being expressed. The values below are the defaults the
+# analysis scripts were built around.
+
+version: v1
+dated: "YYYY-MM-DD"
+status: exploratory   # or confirmatory, if fixed before the data exist
+
+# ---------------------------------------------------------------------------
+# Instrument hierarchy, ordered by how much weight a claim may rest on.
+# ---------------------------------------------------------------------------
+instruments:
+  - id: lexicon
+    role: primary
+    why: >
+      Auditable sentence by sentence: every firing can be read back to the
+      words that caused it.
+  - id: embedding
+    role: convergent
+    why: >
+      Generalises past a finite term list. Used as corroboration, never alone.
+  - id: madrs_bert
+    role: external
+    why: >
+      Shares no code with the other two, so agreement is not a
+      shared-implementation artifact. Available only where its topics map to
+      the injected symptom.
+  - id: human
+    role: validation_target
+    why: >
+      Until human labels exist, an instrument's rate is a statement about the
+      instrument.
+
+# ---------------------------------------------------------------------------
+# Fixed analysis parameters. Each one moves results, so each is pinned.
+# ---------------------------------------------------------------------------
+parameters:
+  unit: bounded-turn        # guarantees coverage; `turn`/`session` truncate
+  unit_agg: max             # top2/top3 reported as sensitivity
+  reference_agg: mean       # `max` saturates with many references per symptom
+  references: expanded      # single reported as sensitivity
+  clean_text: true
+  confirmations: true       # off reported as sensitivity
+  qc_view: all              # never silently exclude
+  min_turns: 1              # recurrence measured, not gated
+
+estimand:
+  contrast: matched_control_per_case_equal_weight
+  description: >
+    One contrast per case (injected minus that case's own controls), pooled
+    across cases with equal weights, so a case with more controls cannot
+    dominate.
+  interval: bootstrap_percentile_95
+  resampling_unit: session_within_case_and_condition
+  bounds: asymmetric        # store actual lo/hi, never a symmetric half-width
+  effect_size: cohens_d
+  scope_limit: >
+    Only sessions are resampled, so intervals are conditional on the observed
+    cases. They do not estimate generalisation to new patient cases; with one
+    case and one model pair, case-level generalisation is not estimable at all.
+
+# ---------------------------------------------------------------------------
+# Sensitivities. Declared so that running them is obligatory, and so that a
+# result surviving only one configuration is visible.
+# ---------------------------------------------------------------------------
+sensitivities:
+  - id: unit_agg
+    values: [max, top2, top3]
+    why: max grows with unit count, and arms are not balanced on it
+  - id: references
+    values: [expanded, single]
+    why: whether the exemplar pools matter at all
+  - id: confirmations
+    values: [true, false]
+    why: confirmation infers the symptom from the therapist's question
+  - id: qc_view
+    values: [all, drop-flagged-turns, drop-flagged-sessions]
+    why: whether flagged generations carry the result
+  - id: crisis_terminated
+    values: [include, exclude]
+    why: >
+      Early termination by design, not failure. Shorter sessions score lower
+      under max-over-units, so unbalanced terminations bias the contrast.
+  - id: unit
+    values: [bounded-turn, turn]
+    why: quantifies what truncation costs
+
+# ---------------------------------------------------------------------------
+# What counts as evidence. Not p < .05.
+# ---------------------------------------------------------------------------
+criteria:
+  magnitude:
+    lexicon_lift_pp: 10.0
+    embedding_cohens_d: 0.4
+    why: >
+      A detectable difference that is too small to matter is not a finding.
+      Both instruments must clear their own bar.
+  specificity:
+    max_leak_pp: 5.0
+    why: >
+      The target detector must not rise in an arm where a different symptom was
+      injected. This separates a symptom-specific effect from a generic
+      "something was injected" response, which a p-value cannot express.
+  direction:
+    require_same_sign: true
+    why: instruments disagreeing in sign is not convergence
+  p_values:
+    role: descriptive
+    why: >
+      Descriptive unless the specification was fixed before the data existed.

@@ -1,7 +1,8 @@
 """Check a corpus against the design it is supposed to instantiate.
 
-`config/designs.yaml` states, prospectively, what each arm should contain. This
-module compares that to what is on disk and reports three things separately:
+`config/designs.yaml` (local; start from `config/designs.example.yaml`) states,
+prospectively, what each arm should contain. This module compares that to what
+is on disk and reports three things separately:
 
   missing      expected cells with fewer runs than declared
   unexpected   sessions present under a prefix the manifest does not describe
