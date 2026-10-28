@@ -31,6 +31,9 @@ class PatientPrior:
     resistance_structure: str = ""
     symptoms: str = ""
     symptom_levels: dict[str, str] = field(default_factory=dict)
+    # Graph-first experiments supply a derived intake profile instead of the
+    # source case and symptom block. The two inputs must never be mixed.
+    profile_text: str = ""
 
     # Runtime tracking
     symptom_discussion: SymptomDiscussion = field(default_factory=SymptomDiscussion)
@@ -42,6 +45,19 @@ class PatientPrior:
         Returns:
             System prompt string passed to the LLM on each turn.
         """
+        if self.profile_text.strip():
+            return (
+                "## Who You Are in This Encounter\n"
+                "You are the person described in the intake profile below, speaking "
+                "in a therapy session. Speak from inside your experience; do not "
+                "recite the profile or use clinical terminology.\n\n"
+                "## Your Intake Profile\n" + self.profile_text.strip() + "\n\n"
+                "## How to Respond\n"
+                "Speak naturally in one to five sentences. Stay consistent with "
+                "your profile, but reveal details only when they fit the conversation.\n\n"
+                + SPEECH_ONLY_INSTRUCTION
+            )
+
         sections = []
 
         sections.append(

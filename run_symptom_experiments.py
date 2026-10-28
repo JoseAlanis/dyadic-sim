@@ -89,9 +89,7 @@ def run_session(
     max_tokens: int,
 ) -> None:
     cmd = [
-        "uv",
-        "run",
-        "python",
+        sys.executable,
         "run.py",
         "--therapist",
         therapist,

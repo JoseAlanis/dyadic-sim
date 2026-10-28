@@ -37,8 +37,8 @@ providers:
 # Active role assignments for a session
 # These are the defaults; override at runtime with --therapist / --patient flags
 roles:
-  therapist: llama3.1
-  patient: llama3.1
+  therapist: mistral-nemo
+  patient: mistral-nemo
 
 # Counterfactual / swap config
 # Used with: uv run python run.py --swap

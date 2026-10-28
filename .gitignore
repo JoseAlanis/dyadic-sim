@@ -27,6 +27,7 @@ __pycache__/
 
 # Sessions and derived outputs: heavy and regenerable.
 data/*
+result/
 
 # Local working notes.
 manuscript/
