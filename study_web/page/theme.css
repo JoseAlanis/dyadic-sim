@@ -1,0 +1,47 @@
+/* Colour tokens from the BibUnion docs theme (bibunion/docs/.vitepress/theme/style.css,
+   commit 8ae9f5a), so the rating page reads as part of the same family.
+   Light on .light, dark on .dark; the page starts dark, like the docs. */
+:root, .light {
+  color-scheme: light;
+  --bu-bg: #ffffff;
+  --bu-bg-alt: #f7f7f9;
+  --bu-bg-soft: #f1f1f5;
+  --bu-bg-elv: #ffffff;
+  --bu-border: #dcdce3;
+  --bu-divider: #e8e8ee;
+  --bu-text-1: #1b1b22;
+  --bu-text-2: #55575f;
+  --bu-text-3: #73757f;
+  --bu-accent: #6d4fd6;
+  --bu-accent-strong: #5b3fc4;
+  --bu-accent-deep: #6d4fd6;
+  --bu-accent-hover: #7c5ce6;
+  --bu-accent-soft: rgba(109, 79, 214, 0.12);
+  --bu-shadow: 0 5px 24px rgba(0, 0, 0, 0.06);
+  --bu-selection: rgba(109, 79, 214, 0.22);
+  --bu-amber: #896025;
+  --bu-amber-soft: rgba(214, 160, 84, 0.14);
+  --bu-danger: #b3261e;
+}
+.dark {
+  color-scheme: dark;
+  --bu-bg: #282834;
+  --bu-bg-alt: #222230;
+  --bu-bg-soft: #303040;
+  --bu-bg-elv: #363648;
+  --bu-border: #48485c;
+  --bu-divider: #3b3b4a;
+  --bu-text-1: #e8e8f0;
+  --bu-text-2: #b1b3c0;
+  --bu-text-3: #858896;
+  --bu-accent: #a78bfa;
+  --bu-accent-strong: #c4b5fd;
+  --bu-accent-deep: #7c5ce6;
+  --bu-accent-hover: #8f72f0;
+  --bu-accent-soft: rgba(167, 139, 250, 0.16);
+  --bu-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  --bu-selection: rgba(167, 139, 250, 0.35);
+  --bu-amber: #e3b878;
+  --bu-amber-soft: rgba(227, 184, 120, 0.12);
+  --bu-danger: #ef9a9a;
+}

@@ -38,7 +38,7 @@ extend-select = ["I", "SIM", "DTZ", "UP", "B"]
 
 [tool.ruff.lint.isort]
 known-first-party = [
-    "agents", "analysis", "memory", "priors", "simulation", "symptom_scoring",
+    "agents", "analysis", "memory", "priors", "simulation", "study_web", "symptom_scoring",
 ]
 
 [tool.pytest.ini_options]

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'">
+  <title>Transcript rating · __RATER__</title>
+  <style>__THEME__
+__STYLE__</style>
+</head>
+<body>
+  <a class="skip" href="#dialogue">Skip to the transcript</a>
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="5" width="18" height="13" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 18v5l5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><rect x="13" y="13" width="16" height="11" rx="4" fill="var(--bu-accent-deep)"/><path d="M24 24v4l-4-4" fill="var(--bu-accent-deep)"/></svg>
+      <span>Transcript rating</span><span class="brand-section" id="brand-rater"></span>
+    </div>
+    <div class="header-actions">
+      <span class="save-state" id="save-state" role="status" aria-live="polite"></span>
+      <button id="help" class="button quiet">Instructions</button>
+      <button id="theme" class="icon-button" title="Switch colour theme" aria-label="Switch colour theme"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 3a7 7 0 0 1 0 14z" fill="currentColor"/></svg></button>
+      <button id="load-file" class="button quiet">Load saved file</button>
+      <input id="file-input" type="file" accept=".json,application/json" hidden>
+      <button id="save-file" class="button primary">Save to file</button>
+    </div>
+  </header>
+  <div id="banner" class="banner" role="alert" hidden></div>
+  <main id="workspace">
+    <div id="loading" role="status">Opening your sessions…</div>
+    <div id="app" class="layout" hidden>
+      <aside class="sessions panel" aria-label="Your sessions">
+        <div class="sessions-header"><h2>Your sessions</h2><p id="overall-progress"></p></div>
+        <nav id="session-list" class="session-list" aria-label="Sessions"></nav>
+        <p class="sessions-foot">When you finish, or whenever you are asked, send the newest file you saved.</p>
+      </aside>
+      <section class="reader" aria-labelledby="session-title">
+        <div class="intro">
+          <div>
+            <p class="eyebrow" id="eyebrow"></p>
+            <h1 id="session-title"></h1>
+            <p class="lede" id="session-lede"></p>
+          </div>
+          <button id="next-unreviewed" class="button">Next unreviewed turn</button>
+        </div>
+        <div class="metrics" id="metrics"></div>
+        <div id="submitted-note" class="note accent" hidden></div>
+        <ol id="dialogue" class="dialogue" aria-label="Session transcript"></ol>
+        <section id="session-form" class="panel form-panel" aria-labelledby="form-title"></section>
+      </section>
+      <aside id="panel" class="annotate panel" aria-label="Evidence"></aside>
+    </div>
+  </main>
+  <dialog id="help-dialog" aria-labelledby="help-title">
+    <div class="dialog-heading"><span id="help-title">Instructions and codebook</span><button class="icon-button" data-close="help-dialog" aria-label="Close instructions">×</button></div>
+    <div class="dialog-body" id="help-body"></div>
+    <div class="dialog-footer"><button class="button primary" data-close="help-dialog">Start rating</button></div>
+  </dialog>
+  <dialog id="reopen-dialog" aria-labelledby="reopen-title">
+    <div class="dialog-heading"><span id="reopen-title">Reopen a submitted session</span><button class="icon-button" data-close="reopen-dialog" aria-label="Cancel">×</button></div>
+    <div class="dialog-body">
+      <p>Your submitted answers are kept as they were. Say briefly why you are reopening; the reason is saved with your file.</p>
+      <label class="field-label" for="reopen-reason">Reason</label>
+      <textarea id="reopen-reason" maxlength="500"></textarea>
+      <p id="reopen-error" class="error" hidden>Please give a reason.</p>
+    </div>
+    <div class="dialog-footer"><button class="button quiet" data-close="reopen-dialog">Cancel</button><button id="reopen-confirm" class="button primary">Reopen session</button></div>
+  </dialog>
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+  <script id="package-data" type="application/json">__DATA__</script>
+  <script>__APP__</script>
+</body>
+</html>
