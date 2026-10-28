@@ -1,23 +1,18 @@
 """Reduce a generated turn to spoken language only.
 
-Local models narrate: roughly one sixth of the characters in llama transcripts
-are stage directions, such as "(pauses, looking down)" or "*I lean forward
-slightly*", and mistral occasionally leaks a role label ("Patient:") into its
-own reply.
+Local models narrate. Turns come back with stage directions such as
+"(pauses, looking down)" or "*I lean forward slightly*", with a leaked role
+label ("Patient:"), or wrapped whole in quotation marks. How much a model does
+this differs between models, so left in place it confounds cross-model
+comparison, and gesture words feed measures that are meant to read speech.
 
-That noise is not cosmetic. Annotation is unevenly distributed across models
-(llama ~16% of characters, mistral ~0.6%), so any cross-model comparison partly
-compares narration style, and gesture words feed straight into the
-embedding/severity measures that are supposed to read *speech*.
+The priors ask for clean speech, but models comply unreliably, so this also runs
+on every recorded turn. `simulation/dyad.py` keeps the original in `*_text_raw`
+whenever cleaning changed anything, so nothing is lost.
 
-Prompts ask for clean speech (see the priors), but models comply unreliably, so
-this runs on every recorded turn as well. `simulation/dyad.py` keeps the
-original in `*_text_raw` whenever cleaning changed anything, so nothing is lost.
-
-Scope check before writing this: across 200 local sessions, every parenthetical
-found was a stage direction, including first-person ones ("I lean forward
-slightly") and non-gestural ones ("walking you out of the office"). No genuine
-spoken aside appeared, so removing all of them is safe.
+Policy: under the speech-only contract every bracketed span is treated as
+narration and removed. The raw text is retained in `*_text_raw`, so a bracketed
+span that was meant as speech can still be recovered.
 """
 
 from __future__ import annotations
@@ -36,9 +31,8 @@ _ROLE_LABEL = re.compile(
     re.IGNORECASE,
 )
 
-# Reasoning-model scratchpads. Neither llama3.1 nor mistral-nemo emits these
-# (0 of 15,077 turns), but Qwen3-class models do, and the tags would otherwise
-# land in the transcript verbatim. Structural backstop only; the reliable
+# Reasoning-model scratchpads. Some models (Qwen3-class, for example) emit
+# them, and the tags would otherwise land in the transcript verbatim. Structural backstop only; the reliable
 # control is the provider's own switch (ollama `think: false`), not a prompt.
 _REASONING_BLOCK = re.compile(
     r"<(think|thinking|reasoning|scratchpad)\b[^>]*>.*?</\1\s*>",
@@ -48,16 +42,15 @@ _STRAY_REASONING_TAG = re.compile(
     r"</?(think|thinking|reasoning|scratchpad)\b[^>]*>", re.IGNORECASE
 )
 
-# The whole turn delivered as a quotation. mistral-nemo does this on 77.5% of
-# patient turns vs llama3.1's 9.9%, a model signature as large as the
-# stage-direction gap and in the opposite direction. Stripped only when the
-# quotes wrap the entire utterance, so quoted speech *inside* a turn survives.
+# The whole turn delivered as a quotation, a habit that differs strongly between
+# models. Stripped only when the quotes wrap the entire utterance, so quoted
+# speech *inside* a turn survives.
 _WRAPPING_QUOTES = re.compile(r'^\s*["“](?P<body>.*)["”]\s*$', re.DOTALL)
 
 # A turn delivered as several quoted fragments and nothing else:
 #   "I'm scared of dogs."  "I just want a normal life."
-# Rare (0.17% of llama turns, 0.40% of mistral) but the same artifact, and the
-# single-wrapper rule below deliberately skips it, because its body contains
+# Rare, but the same artifact, and the single-wrapper rule below deliberately
+# skips it, because its body contains
 # quotes, a guard that exists to protect split dialogue
 # ('"Yes," he said, "fine."').
 # Requiring the whole turn to be quoted fragments separates the two: real
@@ -71,57 +64,30 @@ _REPEATED_SPACE = re.compile(r"[ \t]{2,}")
 _BLANK_LINES = re.compile(r"\n{3,}")
 
 
-# Version of the *generation contract*: what the agents were told to produce and
-# what was done to their output. Distinct from `metadata_schema_version`, which
-# versions the metadata field layout. Recorded on every session so provenance is
-# intrinsic, so analyses can filter on it instead of inferring from dates or run
-# prefixes. Bump whenever a change makes new sessions incomparable with old ones.
+# Version of the *generation contract*: what the agents are told to produce and
+# what is done to their output. Distinct from `metadata_schema_version`, which
+# versions the metadata field layout. Recorded on every session, so analyses can
+# filter on it; a record without the field is version 1. A session can only be
+# continued by the version that started it (`check_continuable` in
+# simulation/session.py). Bump whenever a change makes new sessions incomparable
+# with old ones.
 #
-#   1  (implicit, absent from metadata) Sessions generated before 2026-08-11.
-#      No speech-only instruction, no output cleaning. Stage directions in 73%
-#      of llama turns, wrapping quotes in 77.5% of mistral patient turns; both
-#      artifacts are model-dependent and contaminate cross-model comparison.
-#      See VALIDATION.md finding 6. Treat as PILOT data.
-#   2  Speech-only instruction in both priors + clean_utterance() on every
-#      recorded turn (stage directions, emphasis spans, role labels, wrapping
-#      quotes, reasoning blocks), with pre-cleaning text preserved in *_text_raw.
-#   3  Therapist opens with speech instead of a stage direction; see
-#      simulation/opening.py. The old text instructed the patient to state the
-#      presenting complaint, which templated turn 1; the new one invites a broad
-#      answer without naming any symptom domain.
-#   4  The generator is reduced to priors + cases + symptoms. Removed: the
-#      hidden "unconscious agenda" (a second, uncontrolled source of patient
-#      material, revealed mid-session on a keyword trigger), the hazard monitor
-#      (already observe-only; its substring matcher only ever produced false
-#      positives), and per-turn LLM state compression (an agent-written
-#      "state summary" injected into every system prompt, doubling the calls
-#      per turn and shifting what the patient said for reasons unrelated to
-#      the injected symptom). The system prompt is now the prior alone and the
-#      context is the transcript alone. Transcript rows lose
-#      `unconscious_revealed` and `hazard_flags`; metadata loses
-#      `hazard_monitor` and `hazard_summary`; no state snapshots are written.
-#      Sessions from earlier versions still load (unknown fields are ignored),
-#      but base rates measured on them do not carry over: treat the first v4
-#      batch as a new pilot. Only bedcheck03 (five no_complaint controls) was
-#      generated at this version.
-#   5  Therapist prior tightened after bedcheck03. STAY_WITH_WHAT_IS_SAID now
-#      forbids supplying emotion words the patient has not used, tells the
-#      therapist to take "nothing is wrong" as an answer rather than a puzzle,
-#      and forbids talking about itself; the CBT agenda prior no longer says
-#      the patient "needs to acknowledge their own problems". Patient priors
-#      are unchanged by this bump (case wording is versioned by prefix, as
-#      always). Sessions at v4 and v5 had different therapists and are not
-#      comparable.
-#   6  Both agents receive the conversation in the order it was spoken,
-#      starting from the opening saved with the session
-#      (`initial_patient_prompt`); see simulation/turn_manager.py. A session
-#      can only be continued by the version that started it
-#      (`check_continuable` in simulation/session.py).
+# Version 6:
+#   - the system prompt is the prior alone: the patient case (plus the injected
+#     symptom block, if any) or the therapist base plus orientation variant;
+#     both priors carry SPEECH_ONLY_INSTRUCTION and the therapist's also
+#     STAY_WITH_WHAT_IS_SAID;
+#   - the therapist opens with simulation/opening.py's FIRST_SESSION_OPENING,
+#     saved with the session as `initial_patient_prompt`;
+#   - both agents receive the conversation in the order it was spoken, starting
+#     from the saved opening (simulation/turn_manager.py);
+#   - every recorded turn passes through clean_utterance(); the original text
+#     is kept in `*_text_raw` when cleaning changed it.
 GENERATION_VERSION = 6
 
 # Shared by both priors so the therapist and the patient are held to the same
-# rule. Phrased concretely: an earlier, vaguer "Do not describe what you are
-# doing" in the therapist prior did not prevent stage directions.
+# rule. Phrased concretely, with examples, because an abstract instruction not
+# to describe one's actions is not followed reliably.
 SPEECH_ONLY_INSTRUCTION = (
     "Write only the words spoken aloud, as in a verbatim transcript. "
     "No stage directions, no descriptions of gestures, posture, tone, or "
@@ -134,38 +100,20 @@ SPEECH_ONLY_INSTRUCTION = (
 )
 
 
-# Therapist-only. Observed failure that motivated it: on turn 1 of a live
-# session the therapist said "You've had some frightening experiences with dogs
-# in the past, haven't you?" before the patient had mentioned any history. It
-# guessed right, but it asserted an unstated fact and invited agreement.
+# Therapist-only. A suggestive therapist can implant the thing being measured:
+# if it proposes a symptom, a history or a feeling the patient never brought,
+# the patient may take it up, and the run records symptom expression that the
+# manipulation did not produce. Each clause closes one way of doing that:
 #
-# This is not just a realism problem. A suggestive therapist can implant the
-# thing being measured: if it proposes a symptom the patient never carried, the
-# patient may confirm it, and the run records symptom expression that the
-# manipulation did not produce. Under a design where symptoms are meant to
-# surface implicitly, that is a direct threat to construct validity.
-#
-# The intensity clause was added after a second observed failure: the patient
-# said "a bit more tired than usual, nothing dramatic" and the therapist asked
-# what made them feel "most exhausted lately", upgrading the severity and then
-# asking a question premised on the upgrade. Prohibiting invented facts was not
-# enough, because amplifying a stated one contaminates the measure the same way.
-#
-# The emotion-word and nothing-is-wrong clauses were added after a third, on the
-# no_complaint control arm (bedcheck03, 2026-09-04): the patient called a
-# splitting plank "annoyance, really" and held that line; the therapist
-# relabelled it frustrated, then vulnerable, then "stuck or trapped", turn by
-# turn, until the patient produced "the garage walls are closing in on me" and a
-# storm-at-sea memory. Every symptom-lexicon hit in that session came from the
-# turns after the relabelling. Matching intensity was not enough when the
-# therapist could still change the word; and a patient who says nothing is
-# wrong was being treated as a puzzle rather than as an answer.
-#
-# The last clause is frame, not fidelity: in another bedcheck03 session the
-# patient filled silences by asking about the therapist's hobbies and the
-# therapist obliged at length, book recommendation included. base.yaml already
-# says "you do not self-disclose beyond what serves the patient"; the concrete
-# instruction is here because the abstract one did not hold.
+#   - stating unstated facts (a guessed history invites agreement);
+#   - raising intensity ("a bit tired" asked back as "most exhausted");
+#   - supplying emotion words the patient has not used (relabelling an
+#     annoyance as frustration, then as feeling trapped, walks the patient into
+#     the vocabulary the detectors count);
+#   - treating "nothing is wrong" as a puzzle rather than as an answer;
+#   - talking about itself: base.yaml rules out self-disclosure in the
+#     abstract, and the concrete instruction is here because the abstract one
+#     is not followed reliably.
 #
 # Phrased as clinical practice rather than methodology, so it reads as part of
 # the therapist's stance rather than an experimental control.
@@ -204,8 +152,8 @@ def _strip_wrapping_quotes(text: str) -> str:
         # '"yes," he said, "fine."', where the outer pair is not a wrapper.
         if '"' not in body and "“" not in body and "”" not in body:
             return body.strip()
-    # Truncation at max_tokens leaves an opening quote with no partner (~3% of
-    # quoted turns). A lone leading quote can't be legitimate quoted speech.
+    # Truncation at max_tokens can leave an opening quote with no partner. A
+    # lone leading quote can't be legitimate quoted speech.
     if text[:1] in '"“' and (text.count('"') + text.count("“") + text.count("”")) == 1:
         return text[1:].strip()
     return text
@@ -230,9 +178,9 @@ def clean_utterance(text: str) -> str:
     cleaned = "\n".join(line.strip() for line in cleaned.split("\n"))
     cleaned = _strip_wrapping_quotes(cleaned.strip())
 
-    # ~0.3% of recorded turns are nothing but a stage direction ("(pauses)").
-    # Dropping the turn entirely would break the alternation, so keep the
-    # original and let the analysis layer exclude it as it already does.
+    # A turn can be nothing but a stage direction ("(pauses)"). Dropping it
+    # would break the alternation, so keep the original and let the analysis
+    # layer exclude it.
     if not cleaned:
         return text.strip()
     return cleaned

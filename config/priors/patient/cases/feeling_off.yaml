@@ -1,9 +1,8 @@
 # Patient case: feeling_off
-# Written as the neutral bed; known to seed depressed_mood vocabulary
-# ("not myself"). Kept as a documented failure; no_complaint replaces it.
+# Meant as a neutral case, but its wording ("not myself") overlaps the
+# depressed_mood vocabulary; no_complaint is the neutral case.
 # All fields are shown to the patient agent, first person. No symptoms block:
 # run_symptom_experiments.py injects one per condition; as-is, this is the control.
-# Design notes and revision history: manuscript/CASES.md
 
 presenting_complaint: >
   I'm not really sure what to say, to be honest. Nothing's wrong exactly.

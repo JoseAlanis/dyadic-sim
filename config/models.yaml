@@ -3,28 +3,18 @@
 # All other sections define what is available
 
 providers:
-# Cloud providers are deliberately disabled. The pipeline is kept fully local so
-# runs are reproducible and no transcript content leaves the machine.
+# Only `ollama` is enabled, so `agent_factory` cannot resolve a cloud provider
+# and every session runs on this machine. `agents/local_agent.py` uses the
+# `openai` Python client against Ollama's OpenAI-compatible endpoint on
+# localhost:11434; that is a local call, not a call to OpenAI. Session metadata
+# records the model of every run.
 #
-# Only `ollama` is uncommented, so `agent_factory` can never resolve a cloud
-# provider: every session to date (857 as of 2026-08-12) used llama3.1 or
-# mistral-nemo, and session metadata records the model per run if you want to
-# check. Note `agents/local_agent.py` uses the `openai` PYTHON CLIENT, but points
-# it at Ollama's OpenAI-compatible endpoint on localhost:11434 — that is a local
-# HTTP call, not a call to OpenAI.
-#
-# Uncommenting is enough to enable a cloud provider: `agents/claude_agent.py`
-# and `agents/openai_agent.py` are implemented, and ANTHROPIC_API_KEY and
-# OPENAI_API_KEY are both present in `.env`, which `run.py` loads via
-# `load_dotenv()` at import. So the guard here is the only thing stopping it.
-#
-# Before uncommenting, note what changes besides cost: patient transcripts are
-# simulated clinical material, and a cloud provider means that content is sent
-# off-machine and may be retained by the provider. Mixing providers within one
-# corpus also breaks comparability — model identity is already a large effect
-# here (see VALIDATION.md finding 6 on narration style).
-#
-# Model IDs below refreshed 2026-08-10; see manuscript/INFRASTRUCTURE.md.
+# To enable a cloud provider, uncomment its block and set its API key in `.env`
+# (`run.py` loads it at start); `agents/claude_agent.py` and
+# `agents/openai_agent.py` implement them. Two consequences besides cost: the
+# simulated clinical material is sent off the machine and may be retained by the
+# provider, and model identity has a large effect on the transcripts, so a
+# corpus should not mix providers.
 #  anthropic:
 #    base_url: https://api.anthropic.com
 #    models:

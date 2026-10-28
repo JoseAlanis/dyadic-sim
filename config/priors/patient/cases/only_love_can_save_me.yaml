@@ -3,7 +3,6 @@
 # overlaps the depression domains and puts pressure on the frame.
 # All fields are shown to the patient agent, first person. No symptoms block:
 # run_symptom_experiments.py injects one per condition; as-is, this is the control.
-# Design notes and revision history: manuscript/CASES.md
 
 presenting_complaint: >
   I feel profoundly alone. Not lonely in the ordinary sense, I mean a kind

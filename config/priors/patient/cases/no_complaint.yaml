@@ -2,7 +2,6 @@
 # The null bed: nothing wrong, a spare session through work, a garage project.
 # All fields are shown to the patient agent, first person. No symptoms block:
 # run_symptom_experiments.py injects one per condition; as-is, this is the control.
-# Design notes and revision history: manuscript/CASES.md
 
 presenting_complaint: >
   The company I work for put a few of these sessions on the benefits list this

@@ -27,12 +27,11 @@ class LocalAgent(BaseAgent):
         # Ollama's OpenAI-compatible endpoint.
         #
         # The timeout is load-bearing, not defensive boilerplate. Left unset,
-        # the OpenAI client defaults to 600s with retries, so a hung Ollama
-        # request stalls a batch for ~30 minutes in complete silence. That
-        # happened during the power01 run: the model was evicted mid-batch and
-        # generation sat at 2 turns for 28 minutes before anyone looked. A turn
-        # normally takes ~18s, so 180s is already ten times slack; failing fast
-        # and loudly is worth more than tolerating one slow request.
+        # the OpenAI client waits 600s and retries, so a hung Ollama request
+        # (for example after the model is evicted from VRAM mid-batch) stalls a
+        # batch silently for half an hour. A turn normally takes well under a
+        # minute, so 180s is ample slack; failing fast and loudly is worth more
+        # than tolerating one slow request.
         self._client = OpenAI(
             base_url=f"{self.base_url}/v1",
             api_key="ollama",  # Ollama ignores the key but the client requires one

@@ -12,10 +12,8 @@ patient's list starts with the opening as a user message and the therapist's
 with the opening as its own first line.
 
 The context window is the agent's only view of the world. There is no other
-carrier of memory. An earlier version also injected a per-turn, LLM-written
-"state summary" into the system prompt; that changed what the patient said on
-every turn for reasons unrelated to the manipulation being measured, so the
-prior is now the only constant and the transcript the only record.
+carrier of memory: nothing is summarised or injected between turns, so the
+prior is the only constant and the transcript the only record.
 """
 
 from agents.base_agent import Message

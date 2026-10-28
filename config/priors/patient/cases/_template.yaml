@@ -1,7 +1,7 @@
 # Patient prior template. Copy to cases/<name>.yaml and fill in the five fields
 # in the patient's own voice: first person, concrete, no symptom vocabulary
 # (tests/test_case_priors.py checks). No symptoms block: run_symptom_experiments.py
-# injects one per condition. Design notes for the existing cases: manuscript/CASES.md
+# injects one per condition.
 
 presenting_complaint: >
   [What the patient says they are there for.

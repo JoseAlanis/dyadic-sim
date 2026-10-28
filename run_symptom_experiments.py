@@ -55,19 +55,16 @@ def build_single_symptom_case(
 
     Two schemes, differing only in whether the eight inactive symptoms appear:
 
-    ``all_nine`` (default, and what every session to date used)
-        All nine PHQ-9 items, eight of them reading "not at all". Those eight
+    ``all_nine`` (default)
+        All nine PHQ-9 items, eight of them reading "not at all". The eight
         still *name* their symptom in the prompt ("Thoughts that you would be
-        better off dead: not at all"), which is the point of contention: naming
-        them may prime the patient to touch on them, inflating the within-session
-        denominator that `target_z` divides by. Kept originally to avoid the
-        model inventing levels for unnamed domains, an assumption that was never
+        better off dead: not at all"), which may prime the patient to touch on
+        them. Listing them is intended to discourage the model from inventing
+        levels for domains the prompt leaves unnamed; that effect has not been
         measured.
 
-    ``active_only`` (lever A in manuscript/VALIDATION.md)
-        Only the active symptom's line. Tests whether dropping the eight
-        negatives sharpens within-session contrast, and whether the feared
-        hallucinated variance actually appears.
+    ``active_only``
+        Only the active symptom's line, so no other symptom is named.
     """
     if injection not in {"all_nine", "active_only"}:
         raise ValueError(f"Unknown injection scheme: {injection!r}")
@@ -117,7 +114,10 @@ def run_session(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Batch-run symptom-isolated dyadic simulations for afraid_of_dogs."
+        description=(
+            "Batch-run symptom-injection sessions for one patient case: per run, "
+            "one control and one session per symptom."
+        )
     )
     parser.add_argument("--therapist", required=True, help="Therapist model name")
     parser.add_argument("--patient", required=True, help="Patient model name")
@@ -147,7 +147,7 @@ def main() -> None:
         help=(
             "How the symptom block is written. 'all_nine' (default) lists all 9 "
             "PHQ-9 items with 8 reading 'not at all'; 'active_only' lists just "
-            "the active symptom (lever A). Affects generation, so the two are "
+            "the active symptom. Affects generation, so the two are "
             "separate experimental arms; never mix them in one prefix."
         ),
     )

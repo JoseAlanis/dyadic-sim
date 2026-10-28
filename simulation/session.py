@@ -295,7 +295,7 @@ class Session:
         meta = {
             "metadata_schema_version": 2,
             # What the agents were told to produce and what was done to their
-            # output; see simulation/utterance.py. Absent == version 1 (pilot).
+            # output; see simulation/utterance.py. Absent means version 1.
             "generation_version": self.generation_version,
             "session_id": self.session_id,
             "patient_id": self.patient_id,
