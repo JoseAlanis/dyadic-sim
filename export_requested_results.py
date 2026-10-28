@@ -1,4 +1,4 @@
-"""Export the requested simulation batch into a case/condition hierarchy.
+"""Export one session batch, selected by case-name prefix, into a case/condition hierarchy.
 
 The canonical session records remain under ``data/sessions``.  This exporter
 copies each matching record into ``result/<case>/<condition>/run_<n>`` and
@@ -15,7 +15,6 @@ from collections import Counter
 from pathlib import Path
 
 from symptom_scoring.prior_vocabulary import KEYS, LABELS
-
 
 CASES = (
     "no_complaint",
@@ -153,7 +152,7 @@ def export(prefix: str, sessions_dir: Path, output_dir: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--prefix", default="requested_20260908")
+    parser.add_argument("--prefix", required=True, help="case_name prefix of the batch to export")
     parser.add_argument("--sessions-dir", type=Path, default=Path("data/sessions"))
     parser.add_argument("--output-dir", type=Path, default=Path("result"))
     args = parser.parse_args()

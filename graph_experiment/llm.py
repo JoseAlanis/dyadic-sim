@@ -27,11 +27,11 @@ def _parse_json_response(content: str) -> object:
         try:
             value, end = json.JSONDecoder().raw_decode(stripped)
         except json.JSONDecodeError:
-            raise original_error
+            raise original_error from None
         suffix = stripped[end:].strip()
         if suffix and re.fullmatch(r"(?:'|\\[rnt])+", suffix):
             return value
-        raise original_error
+        raise
 
 
 @dataclass(frozen=True)
