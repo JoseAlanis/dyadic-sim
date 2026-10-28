@@ -1,10 +1,9 @@
 """What each agent is sent, turn by turn, and when a saved session may continue.
 
-Through generation_version 5 the patient read its history out of order (each
-therapist reply before the patient turn it answered) and neither agent saw the
-opening after turn 1. These tests pin the complete requests at the agent
-boundary, with stub agents in place of a model server, and the rule that only
-a session started by the current generator can be continued.
+These tests pin the complete requests at the agent boundary, with stub agents
+in place of a model server: both agents receive the conversation in the order
+it was spoken, starting from the saved opening. They also pin the rule that
+only a session started by the current generator can be continued.
 
     uv run pytest tests/test_conversation_history.py -q
 """

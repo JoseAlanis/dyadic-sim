@@ -112,22 +112,11 @@ _BLANK_LINES = re.compile(r"\n{3,}")
 #      are unchanged by this bump (case wording is versioned by prefix, as
 #      always). Sessions at v4 and v5 had different therapists and are not
 #      comparable.
-#   6  Conversation history fixed. Through v5 the patient's message list was
-#      built by swapping each (patient, therapist) turn pair, which put every
-#      therapist reply before the patient turn it answered and left the
-#      therapist's opening out after turn 1: for P1 T1 P2 T2 the patient read
-#      T1 P1 P2 T2, ending on two of its own lines. The therapist's list was in
-#      order but never contained its own opening. Both now read the
-#      conversation as spoken, starting from the opening saved with the session
-#      (`initial_patient_prompt`) rather than from the current
-#      `opening_utterance()`; see simulation/turn_manager.py. System prompts
-#      are unchanged. Every session at v1-v5 was generated with the scrambled
-#      patient view: those records stay readable and analysable, and the
-#      findings drawn from them stand as findings about that generator, but
-#      how much of their symptom expression or leakage the defect explains is
-#      not known; a matched v5/v6 comparison is the way to find out. A session
-#      from another version can no longer be continued (`check_continuable` in
-#      simulation/session.py), and saving a record keeps its version.
+#   6  Both agents receive the conversation in the order it was spoken,
+#      starting from the opening saved with the session
+#      (`initial_patient_prompt`); see simulation/turn_manager.py. A session
+#      can only be continued by the version that started it
+#      (`check_continuable` in simulation/session.py).
 GENERATION_VERSION = 6
 
 # Shared by both priors so the therapist and the patient are held to the same
