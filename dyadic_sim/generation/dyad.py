@@ -15,6 +15,7 @@ from dyadic_sim.generation.priors.therapist_prior import (
 from dyadic_sim.generation.session import (
     Session,
     check_continuable,
+    check_settings_unchanged,
     completion_record,
     new_session,
     resume_session,
@@ -26,6 +27,10 @@ from dyadic_sim.generation.turn_manager import (
 from dyadic_sim.generation.utterance import clean_utterance
 
 console = Console()
+
+#: The sampling temperature every agent wrapper defaulted to before it could be
+#: set; runs that don't choose one keep sending it.
+DEFAULT_TEMPERATURE = 0.7
 
 
 class Dyad:
@@ -66,11 +71,13 @@ class Dyad:
         # Session (new or resumed). A resumed record is taken as saved: its
         # opening, symptoms and version are never back-filled from the current
         # configuration.
+        # A new patient id for a resumed session is saved by run(), after its
+        # settings check: a refused continuation must leave the folder untouched.
+        self._pending_patient_id = None
         if resumed is not None:
             self.session = resumed
             if patient_id is not None and self.session.patient_id != patient_id:
-                self.session.patient_id = patient_id
-                self.session.save_metadata()
+                self._pending_patient_id = patient_id
         else:
             self.session = new_session(
                 therapist_model=therapist_model,
@@ -88,10 +95,39 @@ class Dyad:
                 self.session.patient_prompt_source = "supplied"
                 self.session.save_metadata({"patient_prompt_source": "supplied"})
 
-    def run(self, n_turns: int = 10, max_tokens: int = 300) -> Session:
+    def run(
+        self,
+        n_turns: int = 10,
+        max_tokens: int = 300,
+        temperature: float = DEFAULT_TEMPERATURE,
+        patient_temperature: float | None = None,
+        therapist_temperature: float | None = None,
+    ) -> Session:
         """
         Run the dyadic exchange for n_turns turns.
+
+        `temperature` applies to both agents unless a role's own temperature is
+        given. A resumed session continues only with the model, settings and
+        rendered prompts its last recorded turn used (check_settings_unchanged).
         """
+        settings = {
+            "patient": {"model": self.patient_agent.model, "max_tokens": max_tokens,
+                        "temperature": patient_temperature if patient_temperature is not None
+                        else temperature},
+            "therapist": {"model": self.therapist_agent.model, "max_tokens": max_tokens,
+                          "temperature": therapist_temperature if therapist_temperature is not None
+                          else temperature},
+        }
+        system_prompts = {
+            "patient": self.patient_prior.build_system_prompt(),
+            "therapist": self.therapist_prior.build_system_prompt(),
+        }
+        check_settings_unchanged(self.session, settings, system_prompts)
+        if self._pending_patient_id is not None:
+            self.session.patient_id = self._pending_patient_id
+            self.session.save_metadata()
+            self._pending_patient_id = None
+
         console.rule(f"[bold]Session: {self.session.session_id}[/bold]")
         console.print(
             f"Therapist: [cyan]{self.therapist_agent.model}[/cyan]  |  "
@@ -112,12 +148,8 @@ class Dyad:
         self.session.begin_diagnostics(start_turn)
         if opening:
             self.session.record_prompt("opening", opening, start_turn)
-        self.session.record_prompt(
-            "patient_system", self.patient_prior.build_system_prompt(), start_turn
-        )
-        self.session.record_prompt(
-            "therapist_system", self.therapist_prior.build_system_prompt(), start_turn
-        )
+        self.session.record_prompt("patient_system", system_prompts["patient"], start_turn)
+        self.session.record_prompt("therapist_system", system_prompts["therapist"], start_turn)
 
         for turn_num in range(start_turn, start_turn + n_turns):
             console.print(f"\n[dim]-- Turn {turn_num} --[/dim]")
@@ -142,6 +174,7 @@ class Dyad:
                 system_prompt=patient_system,
                 messages=patient_messages,
                 max_tokens=max_tokens,
+                temperature=settings["patient"]["temperature"],
             )
             patient_diagnostics = completion_record(
                 "patient", turn_num, patient_prompt_sha, patient_messages,
@@ -179,6 +212,7 @@ class Dyad:
                 system_prompt=therapist_system,
                 messages=therapist_messages,
                 max_tokens=max_tokens,
+                temperature=settings["therapist"]["temperature"],
             )
             therapist_diagnostics = completion_record(
                 "therapist", turn_num, therapist_prompt_sha, therapist_messages,

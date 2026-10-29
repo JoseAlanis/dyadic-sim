@@ -8,6 +8,7 @@ from pathlib import Path
 
 import yaml
 
+from dyadic_sim.cli.sampling import add_temperature_arguments, temperature_flags
 from dyadic_sim.core import paths
 from dyadic_sim.core.vocabulary import KEYS
 
@@ -89,6 +90,7 @@ def run_session(
     orientation: str,
     turns: int,
     max_tokens: int,
+    sampling: list[str] | None = None,
 ) -> None:
     cmd = [
         sys.executable,
@@ -106,6 +108,7 @@ def run_session(
         str(turns),
         "--max-tokens",
         str(max_tokens),
+        *(sampling or []),
     ]
 
     print(f"\nRunning case: {case_name}")
@@ -155,6 +158,7 @@ def main() -> None:
     parser.add_argument("--orientation", default="cbt", help="Therapist orientation")
     parser.add_argument("--turns", type=int, default=10, help="Turns per run")
     parser.add_argument("--max-tokens", type=int, default=300, help="Max tokens per response")
+    add_temperature_arguments(parser)
     parser.add_argument("--repeats", type=int, default=5, help="How many runs per condition")
     parser.add_argument(
         "--start-run",
@@ -241,6 +245,7 @@ def main() -> None:
                 orientation=args.orientation,
                 turns=args.turns,
                 max_tokens=args.max_tokens,
+                sampling=temperature_flags(args),
             )
 
         for symptom_key in symptom_keys:
@@ -258,6 +263,7 @@ def main() -> None:
                     orientation=args.orientation,
                     turns=args.turns,
                     max_tokens=args.max_tokens,
+                    sampling=temperature_flags(args),
                 )
 
         print("\nAll runs completed successfully.")

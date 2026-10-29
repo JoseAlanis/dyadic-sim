@@ -34,8 +34,9 @@ clinical tool.
   token counts and finish reason), `metadata.json` (models, case, injected
   symptom levels, opening line, `generation_version`), `prompts.json` (the
   exact prompts sent, with their hashes) and a PDF transcript. A session can
-  only be continued by the generator version that started it, and only while
-  its stored prompts account for every recorded turn.
+  only be continued by the generator version that started it, with the same
+  models, sampling settings and rendered prompts, and only while its stored
+  prompts account for every recorded turn.
 
 ## Install
 
@@ -65,6 +66,8 @@ uv run python run.py --therapist mistral-nemo --patient mistral-nemo \
   --case no_complaint --orientation cbt --turns 10
 uv run python run.py --list-cases
 uv run python run.py --resume data/sessions/<session_id> --additional-turns 5
+# sampling: --temperature (both agents, default 0.7), --patient-temperature,
+# --therapist-temperature; the same flags work for batches
 
 # a symptom-injection batch: per run, one control and one session per symptom
 uv run python run_symptom_experiments.py --therapist mistral-nemo --patient mistral-nemo \

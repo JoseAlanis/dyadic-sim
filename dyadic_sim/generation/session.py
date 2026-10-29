@@ -699,3 +699,36 @@ def check_continuable(session: Session, prior_supplied: bool = False) -> None:
             "behind its recorded turns are not accounted for."
         )
 
+
+
+def check_settings_unchanged(session: Session, settings: dict, system_prompts: dict) -> None:
+    """Refuse to continue with other settings or prompts than the last turn used.
+
+    `settings[role]` is what this run would send (model, max_tokens,
+    temperature) and `system_prompts[role]` the prompt it rendered, for "patient"
+    and "therapist". Both must equal what the session's last turn recorded:
+    otherwise one transcript would hold two stimuli under one label, as when an
+    edited case file renders a different prompt without any version changing. A
+    turn recorded without diagnostics, or a wrapper that did not report its
+    settings, leaves that part unknown and so unchecked. Call before anything is
+    written or sent.
+    """
+    if not session.transcript:
+        return
+    last = session.transcript[-1]
+    for role in ("patient", "therapist"):
+        recorded = getattr(last, f"{role}_diagnostics")
+        if not isinstance(recorded, dict):
+            continue
+        requested = recorded.get("requested")
+        if requested is not None and requested != settings[role]:
+            raise IncompatibleSessionError(
+                f"{session.session_id}: turn {last.turn} sent the {role} {requested}; "
+                f"this run would send {settings[role]}. Continue it with the same settings."
+            )
+        if recorded.get("system_prompt_sha256") != sha256_text(system_prompts[role]):
+            raise IncompatibleSessionError(
+                f"{session.session_id}: the {role} prompt now renders differently from "
+                f"the one turn {last.turn} was sent (an edited case or prior file?), "
+                "so the session cannot be continued."
+            )

@@ -481,3 +481,136 @@ def test_an_unreadable_prompt_store_is_refused_not_overwritten(sessions_dir):
     with pytest.raises(RuntimeError, match="refusing to overwrite"):
         session.record_prompt("opening", "Hello", 1)
     assert path.read_text() == "{not json"
+
+
+# --- Sampling settings ------------------------------------------------------
+
+
+def _requested(directory, role) -> list[dict]:
+    return [row[f"{role}_diagnostics"]["requested"] for row in _rows(directory)]
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "patient", "therapist"),
+    [
+        ({}, 0.7, 0.7),
+        ({"temperature": 0.3}, 0.3, 0.3),
+        ({"temperature": 0.3, "patient_temperature": 0.5}, 0.5, 0.3),
+        ({"therapist_temperature": 0.2}, 0.7, 0.2),
+    ],
+    ids=["default", "both", "patient-override", "therapist-override"],
+)
+def test_each_role_is_sent_the_temperature_chosen_for_it(sessions_dir, agents, kwargs, patient, therapist):
+    session = _dyad().run(n_turns=2, **kwargs)
+
+    assert _requested(session.session_dir, "patient") == [
+        {"model": "stub", "max_tokens": 300, "temperature": patient}] * 2
+    assert _requested(session.session_dir, "therapist") == [
+        {"model": "stub", "max_tokens": 300, "temperature": therapist}] * 2
+
+
+def test_the_provider_request_is_unchanged_by_default_and_carries_a_chosen_temperature(
+        sessions_dir, monkeypatch):
+    sent: list[dict] = []
+
+    def create(**kwargs):
+        sent.append(kwargs)
+        return _chat_response()
+
+    def build(model, role):
+        agent = LocalAgent(model, role, base_url="http://ollama.test")
+        agent._client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        return agent
+
+    monkeypatch.setattr(dyad_mod, "build_agent", build)
+    _serve(monkeypatch, PS)
+
+    _dyad().run(n_turns=1)
+    _dyad().run(n_turns=1, temperature=0.3)
+
+    assert [set(call) for call in sent] == [{"model", "messages", "max_tokens", "temperature"}] * 4
+    assert [(c["max_tokens"], c["temperature"]) for c in sent] == [(300, 0.7)] * 2 + [(300, 0.3)] * 2
+
+
+def _files(directory) -> dict:
+    return {p.name: p.read_bytes() for p in directory.iterdir()}
+
+
+@pytest.mark.parametrize(
+    ("therapist_model", "run_kwargs"),
+    [
+        ("stub", {"temperature": 0.3}),
+        ("stub", {"max_tokens": 200}),
+        ("stub", {"patient_temperature": 0.5}),
+        ("other-model", {}),
+    ],
+    ids=["temperature", "max-tokens", "one-role-temperature", "model"],
+)
+def test_a_session_is_not_continued_with_other_settings(sessions_dir, agents, therapist_model, run_kwargs):
+    session = _dyad().run(n_turns=1)
+    before = _files(session.session_dir)
+    resumed = Dyad(therapist_model, "stub", CASE, orientation="cbt", session_id=session.session_id)
+
+    with pytest.raises(IncompatibleSessionError, match="same settings"):
+        resumed.run(n_turns=1, **run_kwargs)
+
+    assert _files(session.session_dir) == before
+    assert not resumed.patient_agent.requests and not resumed.therapist_agent.requests
+
+
+def test_a_session_is_not_continued_when_its_prompt_renders_differently(
+        sessions_dir, agents, monkeypatch):
+    session = _dyad().run(n_turns=1)
+    before = _files(session.session_dir)
+    resumed = _dyad(session_id=session.session_id)
+    # As if the case file had been edited after the first run.
+    monkeypatch.setattr(type(resumed.patient_prior), "build_system_prompt",
+                        lambda self: "An edited case.")
+
+    with pytest.raises(IncompatibleSessionError, match="renders differently"):
+        resumed.run(n_turns=1)
+
+    assert _files(session.session_dir) == before
+    assert not resumed.patient_agent.requests
+
+
+def test_the_same_settings_continue(sessions_dir, agents):
+    session = _dyad().run(n_turns=1, temperature=0.3)
+
+    _dyad(session_id=session.session_id).run(n_turns=1, temperature=0.3)
+
+    assert _requested(session.session_dir, "patient")[1]["temperature"] == 0.3
+
+
+def test_the_batch_runner_passes_the_temperatures_to_each_session(monkeypatch):
+    from argparse import Namespace
+
+    import dyadic_sim.cli.run_symptom_experiments as batch
+    from dyadic_sim.cli.sampling import temperature_flags
+
+    commands = []
+    monkeypatch.setattr(batch.subprocess, "run", lambda cmd, check: commands.append(cmd))
+    chosen = Namespace(temperature=0.3, patient_temperature=None, therapist_temperature=0.5)
+
+    batch.run_session("stub", "stub", "case_x", "cbt", 10, 300, sampling=temperature_flags(chosen))
+
+    assert commands[0][-4:] == ["--temperature", "0.3", "--therapist-temperature", "0.5"]
+
+
+def test_a_refused_resume_with_a_new_patient_id_writes_nothing(sessions_dir, agents):
+    session = _dyad().run(n_turns=1, temperature=0.3)
+    before = _files(session.session_dir)
+    resumed = _dyad(session_id=session.session_id, patient_id="P-new")
+
+    with pytest.raises(IncompatibleSessionError, match="same settings"):
+        resumed.run(n_turns=1)
+
+    assert _files(session.session_dir) == before
+
+
+def test_an_accepted_resume_saves_the_new_patient_id(sessions_dir, agents):
+    session = _dyad().run(n_turns=1)
+
+    _dyad(session_id=session.session_id, patient_id="P-new").run(n_turns=1)
+
+    assert _meta(session.session_dir)["patient_id"] == "P-new"

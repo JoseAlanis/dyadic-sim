@@ -24,6 +24,7 @@ from dyadic_sim.core import paths
 
 paths.load_env()
 
+from dyadic_sim.cli.sampling import add_temperature_arguments, temperature_kwargs
 from dyadic_sim.generation.dyad import Dyad
 from dyadic_sim.generation.priors.loader import list_cases, list_orientations
 from dyadic_sim.generation.session import IncompatibleSessionError
@@ -54,6 +55,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--turns", type=int, default=10, help="Number of turns to run")
     parser.add_argument("--max-tokens", type=int, default=300, help="Max tokens per response")
+    add_temperature_arguments(parser)
 
     # Resume mode
     parser.add_argument("--resume", type=str, help="Resume a session by its directory path")
@@ -119,10 +121,11 @@ def main() -> None:
                 session_id=session_id,
                 patient_id=args.patient_id,
             )
+            dyad.run(n_turns=args.additional_turns, max_tokens=args.max_tokens,
+                     **temperature_kwargs(args))
         except IncompatibleSessionError as exc:
             print(f"Error: {exc}")
             sys.exit(1)
-        dyad.run(n_turns=args.additional_turns, max_tokens=args.max_tokens)
         return
 
     # -- Standard session ----------------------------------------------------
@@ -148,7 +151,8 @@ def main() -> None:
         patient_id=args.patient_id,
     )
 
-    session = dyad.run(n_turns=args.turns, max_tokens=args.max_tokens)
+    session = dyad.run(n_turns=args.turns, max_tokens=args.max_tokens,
+                       **temperature_kwargs(args))
 
     print(f"\nSession saved: data/sessions/{session.session_id}/")
     print(f"Transcript:    data/sessions/{session.session_id}/transcript.jsonl")
