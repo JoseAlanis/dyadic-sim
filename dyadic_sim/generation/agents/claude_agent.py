@@ -10,7 +10,12 @@ import os
 import anthropic
 from anthropic import APIConnectionError, APIStatusError
 
-from dyadic_sim.generation.agents.base_agent import AgentResponse, BaseAgent, Message
+from dyadic_sim.generation.agents.base_agent import (
+    AgentResponse,
+    BaseAgent,
+    Message,
+    observed,
+)
 
 
 class ClaudeAgent(BaseAgent):
@@ -42,20 +47,20 @@ class ClaudeAgent(BaseAgent):
             if msg.role in ("user", "assistant")
         ]
 
+        request = {"model": self.model, "max_tokens": max_tokens, "temperature": temperature}
         response = self._client.messages.create(
-            model=self.model,
-            system=system_prompt,
-            messages=formatted,
-            max_tokens=max_tokens,
-            temperature=temperature,
+            system=system_prompt, messages=formatted, **request
         )
 
         return AgentResponse(
             content=response.content[0].text,
             model=self.model,
-            input_tokens=response.usage.input_tokens,
-            output_tokens=response.usage.output_tokens,
+            input_tokens=getattr(response.usage, "input_tokens", None),
+            output_tokens=getattr(response.usage, "output_tokens", None),
             provider="anthropic",
+            finish_reason=response.stop_reason,
+            request=request,
+            observed=observed(response_model=getattr(response, "model", None)),
         )
 
     def is_available(self) -> bool:

@@ -9,7 +9,12 @@ import os
 
 from openai import APIConnectionError, APIStatusError, OpenAI
 
-from dyadic_sim.generation.agents.base_agent import AgentResponse, BaseAgent, Message
+from dyadic_sim.generation.agents.base_agent import (
+    AgentResponse,
+    BaseAgent,
+    Message,
+    observed,
+)
 
 
 class OpenAIAgent(BaseAgent):
@@ -37,19 +42,18 @@ class OpenAIAgent(BaseAgent):
             if msg.role in ("user", "assistant"):
                 formatted.append({"role": msg.role, "content": msg.content})
 
-        response = self._client.chat.completions.create(
-            model=self.model,
-            messages=formatted,
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
+        request = {"model": self.model, "max_tokens": max_tokens, "temperature": temperature}
+        response = self._client.chat.completions.create(messages=formatted, **request)
 
         return AgentResponse(
             content=response.choices[0].message.content,
             model=self.model,
-            input_tokens=response.usage.prompt_tokens if response.usage else None,
-            output_tokens=response.usage.completion_tokens if response.usage else None,
+            input_tokens=getattr(response.usage, "prompt_tokens", None),
+            output_tokens=getattr(response.usage, "completion_tokens", None),
             provider="openai",
+            finish_reason=response.choices[0].finish_reason,
+            request=request,
+            observed=observed(response_model=getattr(response, "model", None)),
         )
 
     def is_available(self) -> bool:

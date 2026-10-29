@@ -24,6 +24,32 @@ class AgentResponse:
     input_tokens: int | None = None
     output_tokens: int | None = None
     provider: str | None = None
+    # Diagnostics, saved with the turn. None means the wrapper did not report
+    # it; a record keeps that as unknown and never fills in a provider default.
+    finish_reason: str | None = None
+    # The settings the wrapper sent, exactly as sent; messages excluded.
+    request: dict | None = None
+    # What the provider confirmed about the model that answered (see observed()).
+    observed: dict | None = None
+
+
+def observed(
+    response_model: str | None = None,
+    digest: str | None = None,
+    quantization: str | None = None,
+    context_length: int | None = None,
+) -> dict:
+    """Facts about the serving model, each None unless the provider confirmed it.
+
+    The keys are always present, so a record says "unknown" explicitly rather
+    than by omission.
+    """
+    return {
+        "response_model": response_model,
+        "digest": digest,
+        "quantization": quantization,
+        "context_length": context_length,
+    }
 
 
 class BaseAgent(ABC):
