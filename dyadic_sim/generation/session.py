@@ -6,7 +6,9 @@ Creates the session directory, metadata file, and transcript log.
 Provides the append_turn() interface used by dyad.py.
 """
 
+import hashlib
 import json
+import os
 import re
 import uuid
 from dataclasses import dataclass, field
@@ -30,6 +32,133 @@ from dyadic_sim.generation.utterance import GENERATION_VERSION
 
 SESSIONS_DIR = Path("data/sessions")
 
+#: The exact prompt texts a session sent, by hash. Only ever grows.
+PROMPTS_FILE = "prompts.json"
+
+#: Version of what this module records about each completion (TurnRecord
+#: diagnostics, PROMPTS_FILE, the metadata "record_diagnostics" block). Separate
+#: from GENERATION_VERSION: recording more changes nothing that is generated.
+DIAGNOSTICS_SCHEMA_VERSION = 1
+
+
+def sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def read_prompt_store(session_dir: Path) -> list[dict] | None:
+    """The validated entries of a session's PROMPTS_FILE; None if there is none.
+
+    Raises ValueError naming the problem: unreadable JSON, another schema, an
+    entry with missing or mistyped fields, a text that does not match its hash,
+    or a duplicate entry.
+    """
+    path = session_dir / PROMPTS_FILE
+    if not path.exists():
+        return None
+    try:
+        stored = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise ValueError(f"{path} cannot be read ({error})") from error
+    if (not isinstance(stored, dict)
+            or stored.get("schema_version") != DIAGNOSTICS_SCHEMA_VERSION
+            or not isinstance(stored.get("prompts"), list)):
+        raise ValueError(f"{path} is not a schema {DIAGNOSTICS_SCHEMA_VERSION} prompt store")
+    seen: set[tuple[str, str]] = set()
+    for index, entry in enumerate(stored["prompts"]):
+        if not (isinstance(entry, dict)
+                and all(isinstance(entry.get(k), str) for k in ("role", "sha256", "text"))
+                and type(entry.get("first_turn")) is int):
+            raise ValueError(f"{path}: entry {index} is malformed")
+        if sha256_text(entry["text"]) != entry["sha256"]:
+            raise ValueError(f"{path}: entry {index} ({entry['role']}) does not match its hash")
+        key = (entry["role"], entry["sha256"])
+        if key in seen:
+            raise ValueError(f"{path}: entry {index} repeats an earlier entry")
+        seen.add(key)
+    return stored["prompts"]
+
+
+def prompt_provenance_problem(session: "Session") -> str | None:
+    """Why a session's recorded prompts cannot be trusted, or None.
+
+    The mark and the rows must agree. A session without a mark (or with a null
+    one) is one recorded before diagnostics existed: allowed only if no row
+    carries diagnostics, and it needs no store, though one that exists must
+    still be valid. A marked session's since_turn lies in 1..turn_count + 1, no
+    row before it carries diagnostics, every row from it on carries both, and a
+    valid store holds its opening and every system prompt those rows refer to.
+    """
+    try:
+        entries = read_prompt_store(session.session_dir)
+    except ValueError as error:
+        return str(error)
+    instrumented = [
+        r.turn for r in session.transcript
+        if r.patient_diagnostics is not None or r.therapist_diagnostics is not None
+    ]
+    mark = session.record_diagnostics
+    if mark is None:
+        if instrumented:
+            return f"turn {instrumented[0]} carries diagnostics but the record_diagnostics mark is missing"
+        return None
+    if (not isinstance(mark, dict)
+            or mark.get("schema_version") != DIAGNOSTICS_SCHEMA_VERSION
+            or type(mark.get("since_turn")) is not int):
+        return f"its record_diagnostics mark is not schema {DIAGNOSTICS_SCHEMA_VERSION}"
+    since = mark["since_turn"]
+    if not 1 <= since <= session.turn_count + 1:
+        return (f"its record_diagnostics mark starts at turn {since}, outside "
+                f"1..{session.turn_count + 1}")
+    if instrumented and instrumented[0] < since:
+        return f"turn {instrumented[0]} carries diagnostics before the mark (turn {since})"
+    if entries is None:
+        return f"{PROMPTS_FILE} is missing"
+    stored = {(e["role"], e["sha256"]) for e in entries}
+    opening = session.initial_patient_prompt
+    if opening and ("opening", sha256_text(opening)) not in stored:
+        return f"its opening is not in {PROMPTS_FILE}"
+    for record in session.transcript:
+        if record.turn < since:
+            continue
+        for role in ("patient", "therapist"):
+            diagnostics = getattr(record, f"{role}_diagnostics")
+            if not isinstance(diagnostics, dict):
+                return f"turn {record.turn} has no {role} diagnostics"
+            if (f"{role}_system", diagnostics.get("system_prompt_sha256")) not in stored:
+                return f"the {role} prompt of turn {record.turn} is not in {PROMPTS_FILE}"
+    return None
+
+
+def completion_record(
+    role: str,
+    turn: int,
+    system_prompt_sha256: str,
+    messages: list,
+    response,
+    elapsed_s: float,
+) -> dict:
+    """What one completion was sent and what came back, for TurnRecord.
+
+    `messages` are the Message objects sent; they are hashed, not stored, since
+    the transcript and the stored opening rebuild them. Everything taken from
+    `response` is copied as reported, so None stays None (unknown), never 0.
+    """
+    sent = json.dumps([[m.role, m.content] for m in messages], ensure_ascii=False)
+    return {
+        "role": role,
+        "turn": turn,
+        "system_prompt_sha256": system_prompt_sha256,
+        "messages_sha256": sha256_text(sent),
+        "n_messages": len(messages),
+        "provider": response.provider,
+        "requested": response.request,
+        "observed": response.observed,
+        "finish_reason": response.finish_reason,
+        "input_tokens": response.input_tokens,
+        "output_tokens": response.output_tokens,
+        "elapsed_s": round(elapsed_s, 3),
+    }
+
 
 @dataclass
 class TurnRecord:
@@ -47,6 +176,13 @@ class TurnRecord:
     therapist_text_raw: str | None = None
     patient_text_raw: str | None = None
     timestamp: str = field(default_factory=lambda: datetime.now(UTC).replace(tzinfo=None).isoformat())
+    # completion_record() for each agent's call on this turn. None on turns
+    # recorded before diagnostics existed: unknown, not empty. Saved with the
+    # completed turn, so a turn that fails (say, the therapist call errors after
+    # the patient call returned) leaves no diagnostics for either call; a
+    # journal of every call would be separate work.
+    patient_diagnostics: dict | None = None
+    therapist_diagnostics: dict | None = None
 
     def to_dict(self) -> dict:
         return self.__dict__.copy()
@@ -76,6 +212,7 @@ class Session:
             initial_patient_prompt: str | None = None,
             generation_version: int | None = GENERATION_VERSION,
             patient_prompt_source: str | None = None,
+            record_diagnostics: dict | None = None,
     ):
         self.session_id = session_id
         self.therapist_model = therapist_model
@@ -95,6 +232,9 @@ class Session:
         # by case_name (None). Read from the record; written only through
         # save_metadata(extra), so a caller's more specific label is kept.
         self.patient_prompt_source = patient_prompt_source
+        # The metadata "record_diagnostics" mark (see begin_diagnostics); None
+        # until diagnostics start, and on records from before they existed.
+        self.record_diagnostics = record_diagnostics
         self.turn_count = 0
         self.transcript: list[TurnRecord] = []
         self.created_at = datetime.now(UTC).replace(tzinfo=None).isoformat()
@@ -104,7 +244,82 @@ class Session:
 
         self._transcript_path = self.session_dir / "transcript.jsonl"
         self._metadata_path = self.session_dir / "metadata.json"
+        self._prompts_path = self.session_dir / PROMPTS_FILE
+        self._prompts: list[dict] | None = None  # PROMPTS_FILE, read on first use
         self._pdf_path = self.session_dir / self._build_pdf_filename()
+
+    def begin_diagnostics(self, first_turn: int) -> None:
+        """Mark the turn from which this record carries completion diagnostics.
+
+        A new session starts at turn 1. A session resumed from before
+        diagnostics existed starts at its first new turn, so its earlier turns
+        stay unknown instead of inheriting today's settings. A mark already in
+        the metadata is never moved.
+        """
+        stored = self._read_metadata().get("record_diagnostics")
+        if stored is not None:
+            self.record_diagnostics = stored
+            return
+        self.record_diagnostics = {
+            "schema_version": DIAGNOSTICS_SCHEMA_VERSION,
+            "since_turn": first_turn,
+            "prompts_file": PROMPTS_FILE,
+        }
+        self.save_metadata({"record_diagnostics": self.record_diagnostics})
+
+    def record_prompt(self, role: str, text: str, turn: int) -> str:
+        """Keep the exact text of a prompt this session sends; return its hash.
+
+        PROMPTS_FILE only grows. A text already stored for `role` is not added
+        again, and stored entries are never changed, so a resumed run cannot
+        rewrite what an earlier run sent; a prompt that changed between runs
+        appears as a new entry with the turn it was first used.
+        """
+        digest = sha256_text(text)
+        if self._prompts is None:
+            self._prompts = self._read_prompts()
+        if any(e["role"] == role and e["sha256"] == digest for e in self._prompts):
+            return digest
+        updated = [*self._prompts, {
+            "role": role,
+            "sha256": digest,
+            "first_turn": turn,
+            "recorded_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+            "text": text,
+        }]
+        # Written whole and swapped in, so a crash leaves the old file intact.
+        # The in-memory copy follows only once the file is replaced: if the
+        # write fails, a retry must write this prompt again, not find it cached.
+        partial = self._prompts_path.with_suffix(".json.partial")
+        try:
+            partial.write_text(
+                json.dumps({"schema_version": DIAGNOSTICS_SCHEMA_VERSION,
+                            "prompts": updated}, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            os.replace(partial, self._prompts_path)
+        except BaseException:
+            partial.unlink(missing_ok=True)
+            raise
+        self._prompts = updated
+        return digest
+
+    def _read_prompts(self) -> list[dict]:
+        """The stored prompts. An invalid file is an error, never overwritten."""
+        try:
+            return read_prompt_store(self.session_dir) or []
+        except ValueError as error:
+            raise RuntimeError(
+                f"{error}; refusing to overwrite the prompts this session already sent."
+            ) from error
+
+    def _read_metadata(self) -> dict:
+        try:
+            with open(self._metadata_path, encoding="utf-8") as handle:
+                loaded = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return loaded if isinstance(loaded, dict) else {}
 
     def append_turn(
         self,
@@ -115,6 +330,8 @@ class Session:
         symptom_discussion_started: bool = False,
         therapist_text_raw: str | None = None,
         patient_text_raw: str | None = None,
+        patient_diagnostics: dict | None = None,
+        therapist_diagnostics: dict | None = None,
     ) -> TurnRecord:
         """
         Record a completed turn to the transcript.
@@ -129,6 +346,8 @@ class Session:
             therapist_text_raw:           Pre-cleaning therapist text, passed only
                                           when cleaning removed something
             patient_text_raw:             Pre-cleaning patient text, same
+            patient_diagnostics:          completion_record() of the patient call
+            therapist_diagnostics:        completion_record() of the therapist call
 
         Returns:
             The TurnRecord appended to the transcript
@@ -145,6 +364,8 @@ class Session:
             symptom_discussion_started=symptom_discussion_started,
             therapist_text_raw=therapist_text_raw,
             patient_text_raw=patient_text_raw,
+            patient_diagnostics=patient_diagnostics,
+            therapist_diagnostics=therapist_diagnostics,
         )
         self.transcript.append(record)
 
@@ -287,15 +508,7 @@ class Session:
         Merges into whatever is already on disk, so successive calls with
         different `extra` keys accumulate instead of overwriting each other.
         """
-        existing: dict = {}
-        if self._metadata_path.exists():
-            try:
-                with open(self._metadata_path, encoding="utf-8") as handle:
-                    loaded = json.load(handle)
-                if isinstance(loaded, dict):
-                    existing = loaded
-            except (OSError, json.JSONDecodeError):
-                existing = {}
+        existing = self._read_metadata()
 
         meta = {
             "metadata_schema_version": 2,
@@ -417,6 +630,7 @@ def resume_session(session_id: str) -> Session:
         initial_patient_prompt=meta.get("initial_patient_prompt"),
         generation_version=meta.get("generation_version"),
         patient_prompt_source=meta.get("patient_prompt_source"),
+        record_diagnostics=meta.get("record_diagnostics"),
     )
 
     # Replay transcript
@@ -449,8 +663,10 @@ def check_continuable(session: Session, prior_supplied: bool = False) -> None:
     the scoring pipeline, the analyses); they only cannot grow. The same holds
     for the patient prompt: a session started from a supplied prior continues
     only when the caller supplies a prior again, and a session built from its
-    case file only when it does not. Call before any agent is built or anything
-    is written.
+    case file only when it does not. And a session that records diagnostics
+    continues only while its stored prompts account for every recorded turn
+    (prompt_provenance_problem). Call before any agent is built or anything is
+    written.
     """
     recorded = session.generation_version
     if recorded != GENERATION_VERSION:
@@ -475,5 +691,11 @@ def check_continuable(session: Session, prior_supplied: bool = False) -> None:
             f"{session.session_id} was generated from a supplied patient prompt "
             f"({session.patient_prompt_source}), not from case {session.case_name!r}; "
             "continue it with the runner that supplied it."
+        )
+    problem = prompt_provenance_problem(session)
+    if problem:
+        raise IncompatibleSessionError(
+            f"{session.session_id} cannot be continued: {problem}, so the prompts "
+            "behind its recorded turns are not accounted for."
         )
 

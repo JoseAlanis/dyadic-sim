@@ -1,3 +1,5 @@
+import time
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -13,6 +15,7 @@ from dyadic_sim.generation.priors.therapist_prior import (
 from dyadic_sim.generation.session import (
     Session,
     check_continuable,
+    completion_record,
     new_session,
     resume_session,
 )
@@ -103,6 +106,19 @@ class Dyad:
 
         start_turn = self.session.turn_count + 1
 
+        # Diagnostics only record; nothing below changes what is sent. The
+        # prompts are stored as rendered before the first completion, and each
+        # completion stores the hash of the system prompt it was actually sent.
+        self.session.begin_diagnostics(start_turn)
+        if opening:
+            self.session.record_prompt("opening", opening, start_turn)
+        self.session.record_prompt(
+            "patient_system", self.patient_prior.build_system_prompt(), start_turn
+        )
+        self.session.record_prompt(
+            "therapist_system", self.therapist_prior.build_system_prompt(), start_turn
+        )
+
         for turn_num in range(start_turn, start_turn + n_turns):
             console.print(f"\n[dim]-- Turn {turn_num} --[/dim]")
 
@@ -118,10 +134,18 @@ class Dyad:
                 history=history,
             )
 
+            patient_prompt_sha = self.session.record_prompt(
+                "patient_system", patient_system, turn_num
+            )
+            started = time.perf_counter()
             patient_response = self.patient_agent.complete(
                 system_prompt=patient_system,
                 messages=patient_messages,
                 max_tokens=max_tokens,
+            )
+            patient_diagnostics = completion_record(
+                "patient", turn_num, patient_prompt_sha, patient_messages,
+                patient_response, time.perf_counter() - started,
             )
             patient_text_raw = patient_response.content.strip()
             patient_text = clean_utterance(patient_text_raw)
@@ -147,10 +171,18 @@ class Dyad:
                 patient_turn=patient_text,
             )
 
+            therapist_prompt_sha = self.session.record_prompt(
+                "therapist_system", therapist_system, turn_num
+            )
+            started = time.perf_counter()
             therapist_response = self.therapist_agent.complete(
                 system_prompt=therapist_system,
                 messages=therapist_messages,
                 max_tokens=max_tokens,
+            )
+            therapist_diagnostics = completion_record(
+                "therapist", turn_num, therapist_prompt_sha, therapist_messages,
+                therapist_response, time.perf_counter() - started,
             )
             therapist_text_raw = therapist_response.content.strip()
             therapist_text = clean_utterance(therapist_text_raw)
@@ -171,6 +203,8 @@ class Dyad:
                 patient_text_raw=(
                     patient_text_raw if patient_text_raw != patient_text else None
                 ),
+                patient_diagnostics=patient_diagnostics,
+                therapist_diagnostics=therapist_diagnostics,
             )
 
         console.rule("[bold]Session complete[/bold]")

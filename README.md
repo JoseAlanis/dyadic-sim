@@ -30,9 +30,12 @@ clinical tool.
   changes a turn, the original text is kept alongside.
 - **Record.** Each session is written to `data/sessions/<session_id>/`:
   `transcript.jsonl` (one row per turn: the patient line and the therapist
-  reply), `metadata.json` (models, case, injected symptom levels, opening line,
-  `generation_version`) and a PDF transcript. A session can only be continued by
-  the generator version that started it.
+  reply, and for both model calls of each completed turn the settings sent,
+  token counts and finish reason), `metadata.json` (models, case, injected
+  symptom levels, opening line, `generation_version`), `prompts.json` (the
+  exact prompts sent, with their hashes) and a PDF transcript. A session can
+  only be continued by the generator version that started it, and only while
+  its stored prompts account for every recorded turn.
 
 ## Install
 

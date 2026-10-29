@@ -175,12 +175,13 @@ def test_every_recorded_utterance_is_sent_once_in_the_order_spoken(sessions_dir,
         assert all(a != b for a, b in pairwise(roles))
 
 
-def test_a_resumed_session_uses_its_saved_opening(sessions_dir, agents):
-    session = _dyad().run(n_turns=1)
-    meta_path = session.session_dir / "metadata.json"
-    meta = json.loads(meta_path.read_text())
-    meta["initial_patient_prompt"] = "Saved opening."
-    meta_path.write_text(json.dumps(meta))
+def test_a_resumed_session_uses_its_saved_opening(sessions_dir, agents, monkeypatch):
+    # Started while the code worded the opening differently, resumed under
+    # today's wording. (Editing the saved opening afterwards would be refused:
+    # the record's stored prompts would no longer account for it.)
+    with monkeypatch.context() as earlier_code:
+        earlier_code.setattr(dyad_mod, "opening_utterance", lambda: "Saved opening.")
+        session = _dyad().run(n_turns=1)
 
     _dyad(session_id=session.session_id).run(n_turns=1)
 
