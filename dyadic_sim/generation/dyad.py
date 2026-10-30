@@ -1,3 +1,4 @@
+import json
 import time
 
 from rich.console import Console
@@ -14,11 +15,14 @@ from dyadic_sim.generation.priors.therapist_prior import (
 )
 from dyadic_sim.generation.session import (
     Session,
+    SessionEndpointError,
     check_continuable,
     check_settings_unchanged,
+    check_stimulus_unchanged,
     completion_record,
     new_session,
     resume_session,
+    sha256_text,
 )
 from dyadic_sim.generation.turn_manager import (
     build_patient_context,
@@ -31,6 +35,36 @@ console = Console()
 #: The sampling temperature every agent wrapper defaulted to before it could be
 #: set; runs that don't choose one keep sending it.
 DEFAULT_TEMPERATURE = 0.7
+
+#: Turns per run when there is no agenda to set the session's length.
+DEFAULT_TURNS = 10
+
+
+def session_length(orientation: str) -> int | None:
+    """The fixed number of turns an orientation's agenda gives a session; None without one.
+
+    Check a requested turn count against it before creating a session, so a
+    refused request leaves nothing behind.
+    """
+    return len(build_therapist_prior(orientation).intake_agenda) or None
+
+
+def resolved_stimulus(opening: str | None, patient_prior: PatientPrior,
+                      therapist_prior: TherapistPrior) -> dict:
+    """Fingerprint of everything the agents can be told in one session.
+
+    The opening, the patient prompt and the therapist prompt for every reply of
+    the agenda, including replies not generated yet, each hashed, plus one hash
+    over all of them. Saved before the first turn; a continuation must match it.
+    """
+    turns = range(1, len(therapist_prior.intake_agenda) + 1) or [None]
+    parts = {
+        "opening": sha256_text(opening or ""),
+        "patient_system": sha256_text(patient_prior.build_system_prompt()),
+        "therapist_system": [sha256_text(therapist_prior.build_system_prompt(t)) for t in turns],
+    }
+    return {"schema_version": 1,
+            "sha256": sha256_text(json.dumps(parts, sort_keys=True)), **parts}
 
 
 class Dyad:
@@ -94,10 +128,17 @@ class Dyad:
                 # Marks the record so a plain resume cannot rebuild it from case_name.
                 self.session.patient_prompt_source = "supplied"
                 self.session.save_metadata({"patient_prompt_source": "supplied"})
+            # Fixed before any turn, so a continuation can be checked against it.
+            self.session.stimulus = self._stimulus()
+            self.session.save_metadata({"stimulus": self.session.stimulus})
+
+        # The agenda fixes the session's length: replies 1..endpoint, then it is
+        # over. None where there is no agenda.
+        self.endpoint = len(self.therapist_prior.intake_agenda) or None
 
     def run(
         self,
-        n_turns: int = 10,
+        n_turns: int | None = None,
         max_tokens: int = 300,
         temperature: float = DEFAULT_TEMPERATURE,
         patient_temperature: float | None = None,
@@ -106,10 +147,15 @@ class Dyad:
         """
         Run the dyadic exchange for n_turns turns.
 
-        `temperature` applies to both agents unless a role's own temperature is
-        given. A resumed session continues only with the model, settings and
-        rendered prompts its last recorded turn used (check_settings_unchanged).
+        `n_turns` defaults to the turns left before the endpoint, and may not
+        run past it. `temperature` applies to both agents unless a role's own
+        temperature is given. A resumed session continues only with the stimulus
+        it started with (check_stimulus_unchanged) and the model and settings its
+        last recorded turn used (check_settings_unchanged). Nothing is written
+        or sent before these checks.
         """
+        check_stimulus_unchanged(self.session, self._stimulus())
+        n_turns = self._turns_to_run(n_turns)
         settings = {
             "patient": {"model": self.patient_agent.model, "max_tokens": max_tokens,
                         "temperature": patient_temperature if patient_temperature is not None
@@ -244,8 +290,35 @@ class Dyad:
             )
 
         console.rule("[bold]Session complete[/bold]")
-        self.session.save_metadata()
+        ended = self.endpoint is not None and self.session.turn_count == self.endpoint
+        self.session.save_metadata(
+            {"ended": {"turn": self.endpoint, "reason": "agenda complete"}} if ended else None
+        )
         return self.session
+
+    def _stimulus(self) -> dict:
+        return resolved_stimulus(
+            self.session.initial_patient_prompt, self.patient_prior, self.therapist_prior
+        )
+
+    def _turns_to_run(self, n_turns: int | None) -> int:
+        """`n_turns`, checked against the endpoint; None means all that remain."""
+        if self.endpoint is None:
+            return DEFAULT_TURNS if n_turns is None else n_turns
+        remaining = self.endpoint - self.session.turn_count
+        if remaining <= 0:
+            raise SessionEndpointError(
+                f"{self.session.session_id} is complete: the intake ends at turn "
+                f"{self.endpoint}."
+            )
+        if n_turns is None:
+            return remaining
+        if n_turns > remaining:
+            raise SessionEndpointError(
+                f"{self.session.session_id}: the intake ends at turn {self.endpoint}; "
+                f"{self.session.turn_count} done, so at most {remaining} more, not {n_turns}."
+            )
+        return n_turns
 
     def _system_prompt(self, role: str, turn: int) -> str:
         """The system prompt `role` is sent on `turn`, rendered as the turn loop does."""

@@ -26,8 +26,10 @@ from dyadic_sim.generation.agents.base_agent import AgentResponse, BaseAgent, Me
 from dyadic_sim.generation.agents.claude_agent import ClaudeAgent
 from dyadic_sim.generation.agents.local_agent import LocalAgent
 from dyadic_sim.generation.agents.openai_agent import OpenAIAgent
-from dyadic_sim.generation.dyad import Dyad
+from dyadic_sim.generation.dyad import Dyad, resolved_stimulus
 from dyadic_sim.generation.opening import FIRST_SESSION_OPENING
+from dyadic_sim.generation.priors.patient_prior import build_patient_prior
+from dyadic_sim.generation.priors.therapist_prior import build_therapist_prior
 from dyadic_sim.generation.session import (
     PROMPTS_FILE,
     IncompatibleSessionError,
@@ -353,6 +355,8 @@ def _write_record_without_diagnostics(directory):
         "initial_patient_prompt": FIRST_SESSION_OPENING,
         "turn_count": 1,
         "created_at": "2026-10-28T22:00:00",
+        "stimulus": resolved_stimulus(
+            FIRST_SESSION_OPENING, build_patient_prior(CASE), build_therapist_prior("cbt")),
     }
     (directory / "metadata.json").write_text(json.dumps(meta))
     row = {
@@ -577,7 +581,7 @@ def test_a_session_is_not_continued_when_its_prompt_renders_differently(
     monkeypatch.setattr(type(resumed.patient_prior), "build_system_prompt",
                         lambda self: "An edited case.")
 
-    with pytest.raises(IncompatibleSessionError, match="renders differently"):
+    with pytest.raises(IncompatibleSessionError, match=r"stimulus differs .*patient_system"):
         resumed.run(n_turns=1)
 
     assert _files(session.session_dir) == before
@@ -624,3 +628,112 @@ def test_an_accepted_resume_saves_the_new_patient_id(sessions_dir, agents):
     _dyad(session_id=session.session_id, patient_id="P-new").run(n_turns=1)
 
     assert _meta(session.session_dir)["patient_id"] == "P-new"
+
+
+# --- The whole stimulus, and the session's endpoint ---------------------------
+
+
+def test_the_stimulus_is_fixed_before_the_first_turn(sessions_dir, agents):
+    dyad = _dyad()
+
+    saved = _meta(dyad.session.session_dir)["stimulus"]
+    assert not (dyad.session.session_dir / "transcript.jsonl").exists()
+    assert len(saved["therapist_system"]) == 10
+    assert saved == resolved_stimulus(FIRST_SESSION_OPENING, dyad.patient_prior, dyad.therapist_prior)
+
+
+def test_a_changed_later_agenda_step_is_not_continued(sessions_dir, agents, monkeypatch):
+    session = _dyad().run(n_turns=3)
+    before = _files(session.session_dir)
+    changed = build_therapist_prior("cbt")
+    changed.intake_agenda = [dict(step) for step in changed.intake_agenda]
+    changed.intake_agenda[3]["text"] = "Ask about something else entirely."
+    monkeypatch.setattr(dyad_mod, "build_therapist_prior", lambda orientation: changed)
+    resumed = _dyad(session_id=session.session_id)
+
+    with pytest.raises(IncompatibleSessionError, match="therapist reply 4"):
+        resumed.run(n_turns=1)
+
+    assert _files(session.session_dir) == before
+    assert not resumed.patient_agent.requests and not resumed.therapist_agent.requests
+
+
+def test_a_session_without_a_saved_stimulus_is_not_continued(sessions_dir, agents):
+    session = _dyad().run(n_turns=1)
+    _edit_json(session.session_dir / "metadata.json", lambda m: m.pop("stimulus"))
+    before = _files(session.session_dir)
+    resumed = _dyad(session_id=session.session_id)
+
+    with pytest.raises(IncompatibleSessionError, match="no saved stimulus fingerprint"):
+        resumed.run(n_turns=1)
+
+    assert _files(session.session_dir) == before
+
+
+def test_a_partial_session_continues_to_the_endpoint_and_is_then_complete(sessions_dir, agents):
+    session = _dyad().run(n_turns=3)
+    assert "ended" not in _meta(session.session_dir)
+
+    _dyad(session_id=session.session_id).run()  # the turns that remain
+
+    assert [row["turn"] for row in _rows(session.session_dir)] == list(range(1, 11))
+    assert _meta(session.session_dir)["ended"] == {"turn": 10, "reason": "agenda complete"}
+    with pytest.raises(IncompatibleSessionError, match="is complete"):
+        _dyad(session_id=session.session_id).run()
+
+
+@pytest.mark.parametrize(("done", "asked"), [(0, 11), (7, 4)], ids=["new-session", "resumed"])
+def test_turns_past_the_endpoint_are_refused_before_anything_happens(sessions_dir, agents, done, asked):
+    dyad = _dyad()
+    if done:
+        dyad.run(n_turns=done)
+        dyad = _dyad(session_id=dyad.session.session_id)
+    before = _files(dyad.session.session_dir)
+
+    with pytest.raises(IncompatibleSessionError, match="the intake ends at turn 10"):
+        dyad.run(n_turns=asked)
+
+    assert _files(dyad.session.session_dir) == before
+    assert not dyad.patient_agent.requests
+
+
+def test_the_runners_refuse_too_many_turns_before_creating_anything(tmp_path, monkeypatch):
+    import subprocess
+    import sys
+
+    import dyadic_sim.cli.run_symptom_experiments as batch
+    from dyadic_sim.generation.dyad import session_length
+
+    assert session_length("cbt") == 10
+
+    with monkeypatch.context() as patch:
+        patch.setattr(batch.subprocess, "run", lambda *a, **k: pytest.fail("session started"))
+        patch.setattr(sys, "argv", ["run-symptom-experiments", "--therapist", "stub",
+                                    "--patient", "stub", "--turns", "11"])
+        with pytest.raises(SystemExit):
+            batch.main()
+
+    single = subprocess.run(
+        [sys.executable, "-c", "from dyadic_sim.cli import main; main()", "--root", str(tmp_path),
+         "run", "--therapist", "stub", "--patient", "stub", "--case", "no_complaint",
+         "--orientation", "cbt", "--turns", "11"],
+        capture_output=True, text=True, check=False,
+    )
+    assert single.returncode == 1
+    assert "the intake ends at turn 10" in single.stdout
+    assert not (tmp_path / "data").exists()
+
+
+def test_the_graph_runner_refuses_too_many_turns_before_its_preflight(tmp_path, monkeypatch):
+    import sys
+
+    import dyadic_sim.cli.run_graph_experiment as graph
+
+    monkeypatch.setattr(graph.Models, "from_env", lambda **k: pytest.fail("preflight reached"))
+    monkeypatch.setattr(sys, "argv", ["run-graph-experiment", "--output-dir", str(tmp_path / "out"),
+                                      "--turns", "11"])
+
+    with pytest.raises(ValueError, match="the intake ends at turn 10"):
+        graph.main()
+
+    assert not (tmp_path / "out").exists()

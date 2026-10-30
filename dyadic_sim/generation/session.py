@@ -214,6 +214,7 @@ class Session:
             patient_prompt_source: str | None = None,
             record_diagnostics: dict | None = None,
             prompt_variant: str | None = PROMPT_VARIANT,
+            stimulus: dict | None = None,
     ):
         self.session_id = session_id
         self.therapist_model = therapist_model
@@ -234,6 +235,10 @@ class Session:
         # gets the current one, a resumed one keeps its own (None = absent,
         # recorded before variants existed).
         self.prompt_variant = prompt_variant
+        # Fingerprint of everything the agents can be told in this session
+        # (dyadic_sim.generation.dyad.resolved_stimulus), saved before the first
+        # turn and compared before any continuation (check_stimulus_unchanged).
+        self.stimulus = stimulus
         # Where the patient prompt came from when it was not the case file named
         # by case_name (None). Read from the record; written only through
         # save_metadata(extra), so a caller's more specific label is kept.
@@ -641,6 +646,7 @@ def resume_session(session_id: str) -> Session:
         patient_prompt_source=meta.get("patient_prompt_source"),
         record_diagnostics=meta.get("record_diagnostics"),
         prompt_variant=meta.get("prompt_variant"),
+        stimulus=meta.get("stimulus"),
     )
 
     # Replay transcript
@@ -663,6 +669,10 @@ def resume_session(session_id: str) -> Session:
 
 class IncompatibleSessionError(RuntimeError):
     """A saved session that the current generator must not continue."""
+
+
+class SessionEndpointError(IncompatibleSessionError):
+    """A request for turns past the end of a fixed-length session."""
 
 
 def check_continuable(session: Session, prior_supplied: bool = False) -> None:
@@ -750,3 +760,33 @@ def check_settings_unchanged(session: Session, settings: dict, render) -> None:
                 f"the one turn {last.turn} was sent (an edited case or prior file?), "
                 "so the session cannot be continued."
             )
+
+
+def check_stimulus_unchanged(session: Session, stimulus: dict) -> None:
+    """Refuse to continue a session whose resolved stimulus has changed.
+
+    `stimulus` is what this run would use (dyadic_sim.generation.dyad.
+    resolved_stimulus): the opening, the patient prompt and the therapist prompt
+    for every reply of the agenda, including replies not yet generated. It must
+    equal the fingerprint saved when the session started, so an edited case or
+    a changed later agenda step cannot hide behind an unchanged label. A session
+    without a saved fingerprint cannot be checked, so it is not continued. Call
+    before anything is written or sent.
+    """
+    saved = session.stimulus
+    if saved is None:
+        raise IncompatibleSessionError(
+            f"{session.session_id} has no saved stimulus fingerprint, so its prompts "
+            "cannot be checked; it cannot be continued."
+        )
+    if saved == stimulus:
+        return
+    changed = [part for part in ("opening", "patient_system") if saved.get(part) != stimulus[part]]
+    before, now = saved.get("therapist_system") or [], stimulus["therapist_system"]
+    changed += [f"therapist reply {k}" for k in range(1, max(len(before), len(now)) + 1)
+                if before[k - 1:k] != now[k - 1:k]]
+    raise IncompatibleSessionError(
+        f"{session.session_id}: the stimulus differs from the one saved when the "
+        f"session started ({', '.join(changed) or 'fingerprint format'}); it cannot be "
+        "continued."
+    )

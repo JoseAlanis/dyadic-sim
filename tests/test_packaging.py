@@ -29,6 +29,7 @@ MUST_SHIP = [
     "dyadic_sim/_defaults/config/models.yaml",
     "dyadic_sim/_defaults/config/priors/therapist/base.yaml",
     "dyadic_sim/_defaults/config/priors/patient/cases/no_complaint.yaml",
+    "dyadic_sim/_defaults/config/priors/patient/symptom_facts.yaml",
     "dyadic_sim/_defaults/config/designs.example.yaml",
     "dyadic_sim/_defaults/config/analysis_spec.example.yaml",
     "dyadic_sim/analysis/exemplars/pool_a.jsonl",

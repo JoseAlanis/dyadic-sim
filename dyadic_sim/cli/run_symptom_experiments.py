@@ -11,6 +11,7 @@ import yaml
 from dyadic_sim.cli.sampling import add_temperature_arguments, temperature_flags
 from dyadic_sim.core import paths
 from dyadic_sim.core.vocabulary import KEYS
+from dyadic_sim.generation.dyad import session_length
 
 CASES_DIR = Path(paths.USER_CONFIG) / "priors" / "patient" / "cases"
 BASE_CASE_NAME = "empty_and_invisible"
@@ -216,6 +217,9 @@ def main() -> None:
 
     if args.control_only and args.no_control:
         parser.error("--control-only and --no-control together would generate nothing")
+    length = session_length(args.orientation)
+    if length is not None and args.turns > length:
+        parser.error(f"the intake ends at turn {length}; --turns {args.turns} asks for more")
 
     if args.control_only:
         symptom_keys = []

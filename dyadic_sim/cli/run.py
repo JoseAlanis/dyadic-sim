@@ -3,8 +3,8 @@ run.py: dyadic-sim entry point
 
 Usage:
   uv run python run.py --therapist llama3.1 --patient llama3.1 --case afraid_of_dogs
-  uv run python run.py --therapist mistral-nemo --patient llama3.1 --case only_love_can_save_me --turns 20
-  uv run python run.py --resume data/sessions/session_20260101_120000_abc123 --additional-turns 10
+  uv run python run.py --therapist mistral-nemo --patient llama3.1 --case only_love_can_save_me --turns 5
+  uv run python run.py --resume data/sessions/session_20260101_120000_abc123   # the turns left, up to turn 10
   uv run python run.py --list-cases
   uv run python run.py --list-orientations
 """
@@ -25,7 +25,7 @@ from dyadic_sim.core import paths
 paths.load_env()
 
 from dyadic_sim.cli.sampling import add_temperature_arguments, temperature_kwargs
-from dyadic_sim.generation.dyad import Dyad
+from dyadic_sim.generation.dyad import Dyad, session_length
 from dyadic_sim.generation.priors.loader import list_cases, list_orientations
 from dyadic_sim.generation.session import IncompatibleSessionError
 
@@ -53,7 +53,10 @@ def parse_args() -> argparse.Namespace:
         choices=["cbt"],
         help="Therapist orientation variant",
     )
-    parser.add_argument("--turns", type=int, default=10, help="Number of turns to run")
+    parser.add_argument(
+        "--turns", type=int, default=10,
+        help="Number of turns to run (default %(default)s; the intake ends at turn 10)",
+    )
     parser.add_argument("--max-tokens", type=int, default=300, help="Max tokens per response")
     add_temperature_arguments(parser)
 
@@ -62,8 +65,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--additional-turns",
         type=int,
-        default=10,
-        help="How many additional turns to run when resuming",
+        default=None,
+        help="How many more turns to run when resuming (default: the turns left "
+             "before the intake ends at turn 10; a complete session is not continued)",
     )
 
     # Info modes
@@ -141,6 +145,11 @@ def main() -> None:
             "For available cases:       uv run python run.py --list-cases\n"
             "For available orientations: uv run python run.py --list-orientations\n"
         )
+        sys.exit(1)
+
+    length = session_length(args.orientation)
+    if length is not None and args.turns > length:
+        print(f"Error: the intake ends at turn {length}; --turns {args.turns} asks for more.")
         sys.exit(1)
 
     dyad = Dyad(

@@ -28,7 +28,7 @@ from dyadic_sim.experiments.graph_profile.pipeline import (
     transcript_units,
     write_json,
 )
-from dyadic_sim.generation.dyad import Dyad
+from dyadic_sim.generation.dyad import Dyad, session_length
 from dyadic_sim.generation.priors.loader import load_patient_case
 from dyadic_sim.generation.priors.patient_prior import PatientPrior
 
@@ -129,6 +129,11 @@ def main() -> None:
     args = arguments()
     if args.repeats < 1 or args.turns < 1:
         raise ValueError("--repeats and --turns must be positive")
+    # Before the provider preflight and any output: Dyad.run() would refuse
+    # too many turns only after the graph and profiles had been generated.
+    length = session_length(args.orientation)
+    if length is not None and args.turns > length:
+        raise ValueError(f"the intake ends at turn {length}; --turns {args.turns} asks for more")
     conditions = selected_conditions(args.conditions)
     models = Models.from_env(mode=args.model_mode)
     preflight = CompletionClient(models, args.output_dir / "preflight_trace.jsonl")
