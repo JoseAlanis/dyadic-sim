@@ -1,4 +1,4 @@
-"""What generation_version 7, prompt variant 7b, tells each agent, and how it is enforced.
+"""What generation_version 7, prompt variant 7c, tells each agent, and how it is enforced.
 
 The golden hashes pin every rendered prompt byte for byte; these tests state
 the decisions behind them, so a later variant changes them on purpose.
@@ -33,7 +33,7 @@ from dyadic_sim.generation.utterance import (
 CASE = "no_complaint"
 AGENDA = ["follow_cue", "why_now", "mood_thoughts", "sleep", "relationships",
           "daily_functioning", "strengths", "goals", "summary", "closing"]
-SLEEP_QUESTION = '"How have you been sleeping lately?"'
+SLEEP_QUESTION = "How have you been sleeping lately?"
 
 
 def _patient_prompt(monkeypatch, case_data) -> str:
@@ -118,6 +118,7 @@ def test_the_patient_is_asked_for_plain_speech(monkeypatch):
     assert "everyday words" in prompt
     assert "Don't ask rhetorical questions" in prompt
     assert "unless you are confirming or clarifying something" in prompt
+    assert "Treat what the therapist says about you as a question, not a fact" in prompt
     assert "let the words carry it" not in prompt
 
 
@@ -149,8 +150,15 @@ def test_each_reply_gets_its_step_and_the_step_decides():
     assert "risk" not in json.dumps(prior.intake_agenda).lower()
 
 
+def test_the_first_reply_is_grounded_in_what_was_said():
+    step = _step(1)
+
+    assert "what they actually said, without adding to it" in step
+    assert "If they only greeted you, ask what they would like to talk about today" in step
+    assert "how much it bothers them" not in step  # presumes a problem
+
+
 def test_only_the_first_reply_explores():
-    assert "follow-up question" in _step(1)
     for turn in range(2, 9):
         assert "Briefly acknowledge their answer" in _step(turn)
         assert "follow-up" not in _step(turn)
@@ -160,14 +168,18 @@ def test_reply_four_asks_only_the_fixed_sleep_question():
     step = _step(4)
 
     assert SLEEP_QUESTION in step
-    assert "Ask nothing else in this reply" in step
+    assert "nothing else" in step
+    assert '"' not in step  # the question is not quoted
     assert "appetite" not in step and "eating" not in step
 
 
 def test_the_summary_is_spoken_and_the_closing_asks_nothing():
     summary, closing = _step(9), _step(10)
 
-    assert "not as a list" in summary
+    assert "not a list" in summary
+    assert "including any health difficulty they described" in summary
+    assert "keep their own qualifications" in summary
+    assert "Add nothing they did not say" in summary
     assert "whether you got it right or missed anything" in summary
     assert "Ask no question in this reply" in closing
     assert "?" not in closing
@@ -197,12 +209,12 @@ def test_sessions_record_the_version_variant_and_agenda_step(sessions_dir):
     meta = json.loads((session.session_dir / "metadata.json").read_text())
     rows = [json.loads(line) for line in (session.session_dir / "transcript.jsonl").read_text().splitlines()]
     assert (meta["generation_version"], meta["prompt_variant"]) == (GENERATION_VERSION, PROMPT_VARIANT)
-    assert (GENERATION_VERSION, PROMPT_VARIANT) == (7, "7b")
+    assert (GENERATION_VERSION, PROMPT_VARIANT) == (7, "7c")
     assert [row["therapist_diagnostics"]["agenda_step"] for row in rows] == AGENDA
     assert all("agenda_step" not in row["patient_diagnostics"] for row in rows)
 
 
-@pytest.mark.parametrize("variant", ["7a", None], ids=["earlier-variant", "no-variant"])
+@pytest.mark.parametrize("variant", ["7b", None], ids=["earlier-variant", "no-variant"])
 def test_a_session_of_another_variant_is_not_continued(sessions_dir, variant):
     session = Dyad("stub", "stub", CASE, orientation="cbt").run(n_turns=1)
     path = session.session_dir / "metadata.json"

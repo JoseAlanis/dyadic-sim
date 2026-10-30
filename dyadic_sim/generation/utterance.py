@@ -101,10 +101,14 @@ _BLANK_LINES = re.compile(r"\n{3,}")
 # and then does its step, which takes precedence over general guidance; one
 # fixed sleep question at reply 4; spoken summary at 9, no question at 10;
 # compact baseline case with optional psychological sections; symptom rules
-# scoped to the symptoms they name.
+# scoped to the symptoms they name. 7c (candidate): reply 1 grounded in what was
+# said (a greeting gets "what would you like to talk about"); reply 4's question
+# without quotation marks; reply 9 summarises what was disclosed, health
+# difficulties and qualifications included; the patient corrects premises that
+# don't fit its profile.
 # Both are recorded on every session and both must match to continue one.
 GENERATION_VERSION = 7
-PROMPT_VARIANT = "7b"
+PROMPT_VARIANT = "7c"
 
 # Shared by both priors so the therapist and the patient are held to the same
 # rule. Phrased concretely, with examples, because an abstract instruction not

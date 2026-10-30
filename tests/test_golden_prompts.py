@@ -7,7 +7,7 @@ each symptom declared absent, and with each of the nine PHQ-9 symptoms at
 "nearly every day" under both injection schemes. Every therapist variant is
 rendered alone and for each reply of the intake agenda. Their SHA-256 are
 pinned in `tests/golden/prompts.json`, captured at generation_version 7,
-prompt variant 7a.
+prompt variant 7c.
 
 A deliberate change to a prior or the opening regenerates the file in the same
 commit, and the commit says why:

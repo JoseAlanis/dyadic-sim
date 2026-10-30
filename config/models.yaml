@@ -33,6 +33,7 @@ providers:
     models:
       - llama3.1
       - mistral-nemo
+      - mistral-small3.2:24b
 
 # Active role assignments for a session
 # These are the defaults; override at runtime with --therapist / --patient flags

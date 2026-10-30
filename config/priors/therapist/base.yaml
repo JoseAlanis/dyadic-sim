@@ -67,10 +67,11 @@ relational_prior: >
 intake_agenda:
   - id: follow_cue
     text: >-
-      Briefly acknowledge what they said. Then ask one follow-up question about
-      what they raised: how often, how much it bothers them, since when, or for
-      one example. If they raised nothing in particular, ask one open question
-      about how things are for them.
+      Briefly acknowledge what they actually said, without adding to it. Then
+      ask one question. If they described a difficulty, ask how often it
+      happens, since when, or for one example. If they mentioned an activity or
+      situation, ask them to tell you a little more about it. If they only
+      greeted you, ask what they would like to talk about today.
   - id: why_now
     text: >-
       Briefly acknowledge their answer in a few words. Then ask one question:
@@ -81,8 +82,8 @@ intake_agenda:
       question about their mood and their thoughts lately.
   - id: sleep
     text: >-
-      Briefly acknowledge their answer in a few words. Then ask, in these words:
-      "How have you been sleeping lately?" Ask nothing else in this reply.
+      Briefly acknowledge their answer in a few words. Then ask exactly this
+      question and nothing else: How have you been sleeping lately?
   - id: relationships
     text: >-
       Briefly acknowledge their answer in a few words. Then ask one neutral
@@ -101,9 +102,11 @@ intake_agenda:
       what they hope for from coming here, if anything.
   - id: summary
     text: >-
-      Give a brief spoken summary of what they told you, in two or three
-      sentences and in their words, not as a list. Then ask one question:
-      whether you got it right or missed anything.
+      In two or three spoken sentences, not a list, summarise the main things
+      they actually told you, including any health difficulty they described,
+      and keep their own qualifications (such as "a bit", "most nights" or "not
+      sure why"). Add nothing they did not say. Then ask one question: whether
+      you got it right or missed anything.
   - id: closing
     text: >-
       Briefly acknowledge what they just said, thank them and close the
