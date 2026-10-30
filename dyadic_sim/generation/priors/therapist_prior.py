@@ -32,8 +32,9 @@ class TherapistPrior:
     ethical_priors: dict[str, str] = field(default_factory=dict)
     self_prior: str = ""
     relational_prior: str = ""
-    # One step per therapist reply: {"id", "text", "follow_up_first"}. Reply k
-    # (the line answering the patient's k-th turn) is given step k.
+    # One step per therapist reply: {"id", "text"}. Reply k (the line answering
+    # the patient's k-th turn) is given step k, which takes precedence over the
+    # general guidance for that reply.
     intake_agenda: list[dict] = field(default_factory=list)
 
     # From variant yaml
@@ -96,16 +97,11 @@ class TherapistPrior:
 
         step = self.agenda_step(turn)
         if step is not None:
-            text = step["text"].strip()
-            if step.get("follow_up_first"):
-                text = (
-                    "If their last answer described a difficulty, first ask one short "
-                    "follow-up about it: how often, how much it bothers them, or since "
-                    "when. Then: " + text
-                )
             sections.append(
-                f"## This Reply\nThis is your reply {turn} of "
-                f"{len(self.intake_agenda)} in this first appointment. {text}"
+                f"## This Reply\nThis is your reply {turn} of {len(self.intake_agenda)} "
+                "in this first appointment. Do exactly this step; where it differs "
+                "from the general guidance above, the step decides.\n\n"
+                + step["text"].strip()
             )
 
         return "\n\n---\n\n".join(sections)

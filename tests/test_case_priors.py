@@ -30,13 +30,17 @@ CASE_DIRS = paths.config_dirs("priors", "patient", "cases")
 #: Fields passed to the patient agent. Any other top-level key in a case file is
 #: ignored by dyadic_sim/generation/priors/patient_prior.py, so it cannot leak vocabulary into speech
 #: and is not linted.
-PATIENT_VISIBLE = (
-    "presenting_complaint",
+#: Required in every case; the rest are optional and left out of the prompt
+#: when absent (since prompt variant 7b).
+REQUIRED = ("presenting_complaint",)
+OPTIONAL = (
+    "everyday_context",
     "theory_of_cure",
     "relational_pattern",
     "transference_expectation",
     "resistance_structure",
 )
+PATIENT_VISIBLE = REQUIRED + OPTIONAL
 
 #: Cases whose whole purpose is to carry a theme that overlaps a symptom domain.
 #: They are exempt, but the exemption is per-case and explicit: a bed is either
@@ -134,9 +138,13 @@ def test_known_contaminated_cases_still_are(name):
 
 
 def test_every_case_declares_the_fields_the_patient_agent_is_given():
-    """A missing field is silently an empty string, which is how a bed loses its
-    resistance structure without anyone noticing."""
+    """The required field is present; an optional one, if declared, is not empty;
+    and no key is unknown, so a misspelt field cannot silently drop a section."""
     for name, path in CASES:
         case = _load(path)
-        missing = [k for k in PATIENT_VISIBLE if not str(case.get(k) or "").strip()]
-        assert not missing, f"case {name!r} is missing patient-visible fields: {missing}"
+        missing = [k for k in REQUIRED if not str(case.get(k) or "").strip()]
+        empty = [k for k in OPTIONAL if k in case and not str(case[k] or "").strip()]
+        unknown = sorted(set(case) - set(PATIENT_VISIBLE))
+        assert not missing, f"case {name!r} is missing required fields: {missing}"
+        assert not empty, f"case {name!r} declares empty fields: {empty}"
+        assert not unknown, f"case {name!r} has unknown fields: {unknown}"

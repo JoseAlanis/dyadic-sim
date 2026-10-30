@@ -23,8 +23,10 @@ class PatientPrior:
     """
     case_name: str
 
-    # Visible to the patient agent from the start
+    # Visible to the patient agent from the start. Only presenting_complaint is
+    # required; a field left empty is left out of the prompt.
     presenting_complaint: str = ""
+    everyday_context: str = ""
     theory_of_cure: str = ""
     relational_pattern: str = ""
     transference_expectation: str = ""
@@ -68,48 +70,39 @@ class PatientPrior:
             "inside your life, not from above it."
         )
 
-        sections.append(
-            "## What Brings You Here\n" + self.presenting_complaint.strip()
-        )
-
-        sections.append(
-            "## What You Believe Would Help\n" + self.theory_of_cure.strip()
-        )
-
-        sections.append(
-            "## How You Tend to Relate\n" + self.relational_pattern.strip()
-        )
-
-        sections.append(
-            "## What You Expect From This Person\n"
-            + self.transference_expectation.strip()
-        )
-
-        sections.append(
-            "## What You Do When Things Get Close\n"
-            + self.resistance_structure.strip()
-        )
+        for heading, text in (
+            ("What Brings You Here", self.presenting_complaint),
+            ("Your Everyday Life", self.everyday_context),
+            ("What You Believe Would Help", self.theory_of_cure),
+            ("How You Tend to Relate", self.relational_pattern),
+            ("What You Expect From This Person", self.transference_expectation),
+            ("What You Do When Things Get Close", self.resistance_structure),
+        ):
+            if text.strip():
+                sections.append(f"## {heading}\n" + text.strip())
 
         if self.symptoms.strip():
             sections.append(
                 "## Your Health Lately\n"
-                "These are facts about you. Bring them in only as described, in "
-                "your own words, never as a list.\n\n"
+                "These are facts about your health. They are not necessarily why "
+                "you came. Mention them only as described, in your own words, "
+                "never as a list.\n\n"
                 + self.symptoms.strip()
-                + "\n\nApart from what is described here, you have no health or "
-                "emotional problems. Do not invent problems, causes or details. "
-                "If you are asked about a detail this does not cover, say you "
-                "don't know or keep it brief."
+                + "\n\nDo not add symptoms, causes or details that this prompt "
+                "does not describe. If you are asked about a detail it doesn't "
+                "cover, say you don't know or keep it brief."
             )
 
         sections.append(
             "## How to Respond\n"
             "Talk the way people talk at a first appointment: everyday words, "
             "plain and direct. Answer what you were asked, usually in one to four "
-            "sentences. Figures of speech and quoting your own thoughts are rare "
-            "in ordinary talk; use them seldom. Don't ask rhetorical questions, "
-            "and don't repeat what you have already said. It is fine to say you "
-            "don't know.\n\n"
+            "sentences; asked how life has been, talk about it naturally, "
+            "including recent activities, interests or plans. Figures of speech "
+            "and quoting your own thoughts are rare in ordinary talk; use them "
+            "seldom. Don't ask rhetorical questions, and don't repeat what you "
+            "have already said unless you are confirming or clarifying something. "
+            "It is fine to say you don't know.\n\n"
             + SPEECH_ONLY_INSTRUCTION
         )
 
@@ -398,6 +391,7 @@ def build_patient_prior(case_name: str) -> PatientPrior:
     return PatientPrior(
         case_name=case_name,
         presenting_complaint=raw.get("presenting_complaint", ""),
+        everyday_context=raw.get("everyday_context", ""),
         theory_of_cure=raw.get("theory_of_cure", ""),
         relational_pattern=raw.get("relational_pattern", ""),
         transference_expectation=raw.get("transference_expectation", ""),

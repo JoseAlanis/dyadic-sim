@@ -1,4 +1,4 @@
-"""What generation_version 7, prompt variant 7a, tells each agent, and how it is enforced.
+"""What generation_version 7, prompt variant 7b, tells each agent, and how it is enforced.
 
 The golden hashes pin every rendered prompt byte for byte; these tests state
 the decisions behind them, so a later variant changes them on purpose.
@@ -31,8 +31,9 @@ from dyadic_sim.generation.utterance import (
 )
 
 CASE = "no_complaint"
-AGENDA = ["follow_cue", "why_now", "mood_thoughts", "sleep_appetite", "relationships",
+AGENDA = ["follow_cue", "why_now", "mood_thoughts", "sleep", "relationships",
           "daily_functioning", "strengths", "goals", "summary", "closing"]
+SLEEP_QUESTION = '"How have you been sleeping lately?"'
 
 
 def _patient_prompt(monkeypatch, case_data) -> str:
@@ -45,15 +46,25 @@ def _health_section(prompt: str) -> str:
     return prompt[start:prompt.index("\n---\n", start)]
 
 
+def _step(turn: int) -> str:
+    return build_therapist_prior("cbt").build_system_prompt(turn).split("## This Reply")[1]
+
+
 # --- Patient ------------------------------------------------------------------
 
 
-def test_the_patient_frame_presumes_no_problem(monkeypatch):
+def test_the_baseline_is_compact_and_presumes_no_problem(monkeypatch):
     prompt = _patient_prompt(monkeypatch, load_patient_case(CASE))
 
     assert "first appointment" in prompt
     assert "something is wrong" not in prompt
-    assert "you will not find much" not in prompt  # no instruction to deny
+    assert "didn't come because of a particular concern" in prompt
+    assert "Apart from the health facts below, I have no health or emotional problems" in prompt
+    assert "## Your Everyday Life" in prompt
+    assert "garage" not in prompt
+    for optional in ("What You Believe Would Help", "How You Tend to Relate",
+                     "What You Expect From This Person", "What You Do When Things Get Close"):
+        assert optional not in prompt
     assert "## Your Health Lately" not in prompt  # nothing declared, nothing rendered
 
 
@@ -69,7 +80,8 @@ def test_the_sleep_arm_states_the_facts_and_when_to_disclose_them(monkeypatch):
     assert "haven't tried anything in particular" in section
     assert "You don't bring this up yourself; when the therapist asks about your sleep" in section
     assert "tired" not in section  # no added feature for the low-energy detector
-    assert "Do not invent problems" in section
+    assert "not necessarily why you came" in section
+    assert "Do not add symptoms, causes or details" in section
 
 
 def test_the_control_declares_the_compared_symptom_absent(monkeypatch):
@@ -78,7 +90,17 @@ def test_the_control_declares_the_compared_symptom_absent(monkeypatch):
 
     assert "Sleep: you sleep well" in section
     assert "difficulty" not in section
-    assert "Do not invent problems" in section
+    assert "Do not add symptoms, causes or details" in section
+
+
+def test_the_symptom_rules_do_not_contradict_another_case(monkeypatch):
+    """The baseline's "no other problems" is its own; another case keeps its problem."""
+    case = build_no_symptoms_case(load_patient_case("afraid_of_dogs"), absent=["sleep_problems"])
+    prompt = _patient_prompt(monkeypatch, case)
+
+    assert "dogs" in prompt
+    assert "no health or emotional problems" not in prompt
+    assert "Sleep: you sleep well" in _health_section(prompt)
 
 
 def test_all_nine_names_the_eight_others_as_absent(monkeypatch):
@@ -95,36 +117,60 @@ def test_the_patient_is_asked_for_plain_speech(monkeypatch):
 
     assert "everyday words" in prompt
     assert "Don't ask rhetorical questions" in prompt
-    assert "don't repeat what you have already said" in prompt
+    assert "unless you are confirming or clarifying something" in prompt
     assert "let the words carry it" not in prompt
 
 
 # --- Therapist ----------------------------------------------------------------
 
 
-def test_the_therapist_runs_an_intake_without_treatment_techniques():
+def test_the_therapist_runs_an_intake_without_competing_question_rules():
     prompt = build_therapist_prior("cbt").build_system_prompt()
 
     assert "first appointment, an intake" in prompt
     assert "No Socratic questioning" in prompt
-    assert "Socratic questioning provides guidance" not in prompt  # v6 technique
-    assert "review homework" not in prompt
+    assert "never in lists or bullet points" in prompt
+    # General rules that would compete with a step are gone.
+    assert "Ask one question at a time" not in prompt
+    assert "When something is raised" not in prompt
+    assert "Ask more than you interpret" not in STAY_WITH_WHAT_IS_SAID
     assert "Follow what they bring" not in STAY_WITH_WHAT_IS_SAID
     assert "never suggest that they have a problem" in STAY_WITH_WHAT_IS_SAID
 
 
-def test_each_reply_gets_its_agenda_step():
+def test_each_reply_gets_its_step_and_the_step_decides():
     prior = build_therapist_prior("cbt")
 
     assert [step["id"] for step in prior.intake_agenda] == AGENDA
     for turn in range(1, 11):
-        assert f"This is your reply {turn} of 10" in prior.build_system_prompt(turn)
-    assert "How have you been sleeping and eating lately?" in prior.build_system_prompt(4)
-    assert "whether anything is missing" in prior.build_system_prompt(9)
-    closing = prior.build_system_prompt(10).split("## This Reply")[1]
-    assert "Do not ask a question" in closing
+        assert f"This is your reply {turn} of 10" in _step(turn)
+        assert "the step decides" in _step(turn)
     assert "## This Reply" not in prior.build_system_prompt(11)
     assert "risk" not in json.dumps(prior.intake_agenda).lower()
+
+
+def test_only_the_first_reply_explores():
+    assert "follow-up question" in _step(1)
+    for turn in range(2, 9):
+        assert "Briefly acknowledge their answer" in _step(turn)
+        assert "follow-up" not in _step(turn)
+
+
+def test_reply_four_asks_only_the_fixed_sleep_question():
+    step = _step(4)
+
+    assert SLEEP_QUESTION in step
+    assert "Ask nothing else in this reply" in step
+    assert "appetite" not in step and "eating" not in step
+
+
+def test_the_summary_is_spoken_and_the_closing_asks_nothing():
+    summary, closing = _step(9), _step(10)
+
+    assert "not as a list" in summary
+    assert "whether you got it right or missed anything" in summary
+    assert "Ask no question in this reply" in closing
+    assert "?" not in closing
 
 
 # --- Identity and enforcement ------------------------------------------------
@@ -151,11 +197,12 @@ def test_sessions_record_the_version_variant_and_agenda_step(sessions_dir):
     meta = json.loads((session.session_dir / "metadata.json").read_text())
     rows = [json.loads(line) for line in (session.session_dir / "transcript.jsonl").read_text().splitlines()]
     assert (meta["generation_version"], meta["prompt_variant"]) == (GENERATION_VERSION, PROMPT_VARIANT)
+    assert (GENERATION_VERSION, PROMPT_VARIANT) == (7, "7b")
     assert [row["therapist_diagnostics"]["agenda_step"] for row in rows] == AGENDA
     assert all("agenda_step" not in row["patient_diagnostics"] for row in rows)
 
 
-@pytest.mark.parametrize("variant", ["7z", None], ids=["other-variant", "no-variant"])
+@pytest.mark.parametrize("variant", ["7a", None], ids=["earlier-variant", "no-variant"])
 def test_a_session_of_another_variant_is_not_continued(sessions_dir, variant):
     session = Dyad("stub", "stub", CASE, orientation="cbt").run(n_turns=1)
     path = session.session_dir / "metadata.json"

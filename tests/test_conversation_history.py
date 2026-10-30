@@ -266,7 +266,7 @@ def test_a_stub_session_writes_a_complete_record(sessions_dir, agents):
     transcript = (session.session_dir / "transcript.jsonl").read_text().splitlines()
     rows = [json.loads(line) for line in transcript]
 
-    assert (GENERATION_VERSION, PROMPT_VARIANT) == (7, "7a")
+    assert (GENERATION_VERSION, PROMPT_VARIANT) == (7, "7b")
     assert meta["generation_version"] == GENERATION_VERSION
     assert meta["prompt_variant"] == PROMPT_VARIANT
     assert meta["turn_count"] == 2

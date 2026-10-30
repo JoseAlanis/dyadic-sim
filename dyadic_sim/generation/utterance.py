@@ -97,9 +97,14 @@ _BLANK_LINES = re.compile(r"\n{3,}")
 # A prompt's identity is (GENERATION_VERSION, PROMPT_VARIANT). Every change to
 # prompt text gets a new, immutable PROMPT_VARIANT ("7a", "7b", ...), never
 # reused; a change to the generation mechanics gets a new GENERATION_VERSION.
+# 7a: first intake candidate (development only). 7b: each reply acknowledges
+# and then does its step, which takes precedence over general guidance; one
+# fixed sleep question at reply 4; spoken summary at 9, no question at 10;
+# compact baseline case with optional psychological sections; symptom rules
+# scoped to the symptoms they name.
 # Both are recorded on every session and both must match to continue one.
 GENERATION_VERSION = 7
-PROMPT_VARIANT = "7a"
+PROMPT_VARIANT = "7b"
 
 # Shared by both priors so the therapist and the patient are held to the same
 # rule. Phrased concretely, with examples, because an abstract instruction not
@@ -143,9 +148,7 @@ STAY_WITH_WHAT_IS_SAID = (
     "history or their feelings on their behalf. If you have a hunch, hold it, "
     "or ask about it openly instead of asserting it. You may raise each area of "
     "today's agenda with a brief, neutral question; never suggest that they "
-    "have a problem they have not described. Ask more than you interpret: an "
-    "open question that lets them choose what comes next is worth more than a "
-    "specific one that hands them the answer. "
+    "have a problem they have not described. "
     "Match the strength of what they said rather than raising it. If they call "
     "something a bit difficult, it is a bit difficult, not devastating; reflect "
     "it back at their intensity, in their words where you can. "

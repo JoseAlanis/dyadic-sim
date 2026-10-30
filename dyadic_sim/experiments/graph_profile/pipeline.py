@@ -53,8 +53,8 @@ def read_json(path: Path) -> object:
 
 def source_units(case: dict, symptom: str | None, frequency: str) -> list[dict]:
     units = []
-    for key in ("presenting_complaint", "theory_of_cure", "relational_pattern",
-                "transference_expectation", "resistance_structure"):
+    for key in ("presenting_complaint", "everyday_context", "theory_of_cure",
+                "relational_pattern", "transference_expectation", "resistance_structure"):
         for sentence in re.split(r"(?<=[.!?])\s+", str(case.get(key, "")).strip()):
             if sentence.strip():
                 units.append({"source": key, "text": sentence.strip()})

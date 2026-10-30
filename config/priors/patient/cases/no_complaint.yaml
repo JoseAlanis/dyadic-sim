@@ -1,31 +1,21 @@
 # Patient case: no_complaint
-# The null bed: no particular problem, a spare session through work, a garage
-# project. All fields are shown to the patient agent, first person. No symptoms
-# block: run_symptom_experiments.py injects one per condition and declares the
-# batch's symptoms absent in the control.
-# Since generation_version 7: plain wording, and no instructions to deny or
-# deflect, so an injected symptom is not pushed into denial.
+# The null bed: no presenting concern, ordinary manageable demands, a small
+# fixed background. All fields are shown to the patient agent, first person.
+# No symptoms block: run_symptom_experiments.py injects one per condition and
+# declares the batch's symptoms absent in the control, so the health facts are
+# stated separately from the reason for attending.
+# Since prompt variant 7b: compact, without the optional psychological
+# sections (theory of cure, relational pattern, transference, resistance), and
+# the rule against further problems belongs to this case alone.
 
 presenting_complaint: >
-  The company I work for put a few of these sessions on the benefits list this
-  year, and I had one spare, so here I am. I don't have a particular problem to
-  bring; I'm doing well. If you want a subject, the garage is the current one:
-  shelves, a bit of rewiring, and a floor that turned out to be two floors. I
-  started in March and I'm still at it, Saturdays mostly. That's how I like it.
+  This is an introductory appointment my work offers, and I had one available.
+  I didn't come because of a particular concern. Life has the usual demands and
+  the odd minor frustration, and I'm managing my usual responsibilities and
+  activities. Apart from the health facts below, I have no health or emotional
+  problems.
 
-theory_of_cure: >
-  I don't have one, because I'm not here to fix anything. My brother reckons a
-  joiner would have finished the garage in a fortnight. I like doing it myself,
-  and I'll carry on.
-
-relational_pattern: >
-  Straightforward. I've had the same three or four friends since school and we
-  see each other most months. I'm polite and I assume people mean well. If
-  someone needs a hand shifting furniture, I turn up.
-
-transference_expectation: >
-  I expect you'll ask how things are, and I'll answer honestly.
-
-resistance_structure: >
-  If you ask how something is going, I'll tell you plainly. Feelings aren't my
-  favourite subject, but I answer what I'm asked.
+everyday_context: >
+  I'm 41 and work as an electrician for a local firm. I live with my partner,
+  and I see a few old friends most months. In my spare time I do DIY at home,
+  mostly on Saturdays.

@@ -2,7 +2,7 @@
 # generation_version 7). Rendered by dyadic_sim/generation/priors/patient_prior.py
 # into the "Your Health Lately" section.
 #
-# Only sleep_problems is fully specified (prompt variant 7a, for the v7
+# Only sleep_problems is fully specified (since prompt variant 7a, for the v7
 # comparison). The other symptoms use `default`: frequency and duration only,
 # every other detail left unspecified, so the patient says it does not know
 # rather than inventing one.

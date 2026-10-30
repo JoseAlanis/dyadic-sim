@@ -1,7 +1,9 @@
-# Patient prior template. Copy to cases/<name>.yaml and fill in the five fields
-# in the patient's own voice: first person, concrete, no symptom vocabulary
-# (tests/test_case_priors.py checks). No symptoms block: run_symptom_experiments.py
-# injects one per condition.
+# Patient prior template. Copy to cases/<name>.yaml and fill in the fields in
+# the patient's own voice: first person, concrete, no symptom vocabulary
+# (tests/test_case_priors.py checks). Only presenting_complaint is required; the
+# others are optional and left out of the prompt when absent, and a short
+# `everyday_context` (who I am, work, people, interests) may be added. No
+# symptoms block: run_symptom_experiments.py injects one per condition.
 
 presenting_complaint: >
   [What the patient says they are there for.
