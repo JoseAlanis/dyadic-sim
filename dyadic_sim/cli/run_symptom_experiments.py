@@ -42,9 +42,18 @@ def write_case(case_name: str, data: dict) -> Path:
     return path
 
 
-def build_no_symptoms_case(base_case: dict) -> dict:
+def build_no_symptoms_case(base_case: dict, absent=()) -> dict:
+    """The control: no symptom present, and each key in `absent` declared absent.
+
+    Declaring the batch's symptoms absent states the control's facts as plainly
+    as the injected arm states its own; without it the control would be silent
+    on exactly the symptom being compared.
+    """
     case_data = copy.deepcopy(base_case)
     case_data.pop("symptoms", None)
+    case_data.pop("symptoms_absent", None)
+    if absent:
+        case_data["symptoms_absent"] = list(absent)
     return case_data
 
 
@@ -235,7 +244,10 @@ def main() -> None:
         control_runs = () if args.no_control else run_numbers
         for i in control_runs:
             case_name = f"{args.prefix}_{args.case}_no_symptoms_run_{i}"
-            case_data = build_no_symptoms_case(base_case)
+            # Under all_nine every symptom is named, absent or present; under
+            # active_only, the control names the symptoms this batch injects.
+            absent = SYMPTOM_KEYS if args.injection == "all_nine" else symptom_keys
+            case_data = build_no_symptoms_case(base_case, absent=absent)
             generated_case_paths.append(write_case(case_name, case_data))
 
             run_session(

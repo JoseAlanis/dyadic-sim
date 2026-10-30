@@ -32,17 +32,31 @@ class TherapistPrior:
     ethical_priors: dict[str, str] = field(default_factory=dict)
     self_prior: str = ""
     relational_prior: str = ""
+    # One step per therapist reply: {"id", "text", "follow_up_first"}. Reply k
+    # (the line answering the patient's k-th turn) is given step k.
+    intake_agenda: list[dict] = field(default_factory=list)
 
     # From variant yaml
     agenda_prior: str = ""
     technical_priors: list[str] = field(default_factory=list)
 
-    def build_system_prompt(self) -> str:
+    def agenda_step(self, turn: int | None) -> dict | None:
+        """The agenda step for reply `turn`; None outside the agenda."""
+        if turn is None or not 1 <= turn <= len(self.intake_agenda):
+            return None
+        return self.intake_agenda[turn - 1]
+
+    def build_system_prompt(self, turn: int | None = None) -> str:
         """
         Render the full system prompt for a therapist turn.
 
+        Args:
+            turn: the reply being written (k answers the patient's k-th turn).
+                  Within the agenda it adds that step; None renders the prior
+                  alone.
+
         Returns:
-            System prompt string passed to the LLM on each turn.
+            System prompt string passed to the LLM on that turn.
         """
         sections = []
 
@@ -80,6 +94,20 @@ class TherapistPrior:
             + SPEECH_ONLY_INSTRUCTION
         )
 
+        step = self.agenda_step(turn)
+        if step is not None:
+            text = step["text"].strip()
+            if step.get("follow_up_first"):
+                text = (
+                    "If their last answer described a difficulty, first ask one short "
+                    "follow-up about it: how often, how much it bothers them, or since "
+                    "when. Then: " + text
+                )
+            sections.append(
+                f"## This Reply\nThis is your reply {turn} of "
+                f"{len(self.intake_agenda)} in this first appointment. {text}"
+            )
+
         return "\n\n---\n\n".join(sections)
 
 
@@ -103,6 +131,7 @@ def build_therapist_prior(orientation: str = "psychodynamic") -> TherapistPrior:
         ethical_priors=base.get("ethical_priors", {}),
         self_prior=base.get("self_prior", ""),
         relational_prior=base.get("relational_prior", ""),
+        intake_agenda=base.get("intake_agenda", []),
         agenda_prior=variant.get("agenda_prior", ""),
         technical_priors=variant.get("technical_priors", []),
     )

@@ -50,6 +50,11 @@ def load_therapist_variant(orientation: str) -> dict:
     return _load(path)
 
 
+def load_symptom_facts() -> dict:
+    """What the patient is told about injected and absent symptoms."""
+    return _load(_prior("patient", "symptom_facts.yaml"))
+
+
 def load_patient_case(case_name: str) -> dict:
     """
     Load a patient case file.

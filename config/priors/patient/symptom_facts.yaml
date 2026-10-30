@@ -1,0 +1,53 @@
+# What the patient is told about an injected or absent symptom (since
+# generation_version 7). Rendered by dyadic_sim/generation/priors/patient_prior.py
+# into the "Your Health Lately" section.
+#
+# Only sleep_problems is fully specified (prompt variant 7a, for the v7
+# comparison). The other symptoms use `default`: frequency and duration only,
+# every other detail left unspecified, so the patient says it does not know
+# rather than inventing one.
+#
+# Placeholders: {label} (PHQ-9 label), {how_often} (from the batch's frequency
+# anchor), {topic} (what the therapist has to ask about before it is disclosed).
+
+default:
+  present: "{label}: {how_often}, for about a month. Nothing more about it is specified."
+  how_often:
+    several days: on several days
+    more than half the days: on more than half the days
+    nearly every day: nearly every day
+  absent: "{label}: not a problem for you."
+
+disclosure:
+  when_asked: >-
+    You don't bring this up yourself; when the therapist asks about {topic},
+    answer plainly and truthfully.
+
+symptoms:
+  lack_of_pleasure:
+    topic: your interests and what you enjoy
+  depressed_mood:
+    topic: your mood
+  sleep_problems:
+    topic: your sleep
+    present: >-
+      Sleep: for about a month you have had difficulty falling asleep
+      {how_often}. You are managing at work. You can't say what causes it, and
+      you haven't tried anything in particular about it.
+    how_often:
+      several days: on several nights
+      more than half the days: on more than half the nights
+      nearly every day: nearly every night
+    absent: "Sleep: you sleep well; falling asleep and sleeping through are no trouble."
+  low_energy:
+    topic: your energy
+  appetite_changes:
+    topic: your appetite or eating
+  feelings_of_failure_or_guilt:
+    topic: how you feel about yourself
+  concentration_problems:
+    topic: your concentration
+  psychomotor_changes:
+    topic: how you have been moving or speaking
+  thoughts_of_death_or_self_harm:
+    topic: thoughts of death or of hurting yourself

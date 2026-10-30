@@ -118,11 +118,7 @@ class Dyad:
                           "temperature": therapist_temperature if therapist_temperature is not None
                           else temperature},
         }
-        system_prompts = {
-            "patient": self.patient_prior.build_system_prompt(),
-            "therapist": self.therapist_prior.build_system_prompt(),
-        }
-        check_settings_unchanged(self.session, settings, system_prompts)
+        check_settings_unchanged(self.session, settings, self._system_prompt)
         if self._pending_patient_id is not None:
             self.session.patient_id = self._pending_patient_id
             self.session.save_metadata()
@@ -148,8 +144,10 @@ class Dyad:
         self.session.begin_diagnostics(start_turn)
         if opening:
             self.session.record_prompt("opening", opening, start_turn)
-        self.session.record_prompt("patient_system", system_prompts["patient"], start_turn)
-        self.session.record_prompt("therapist_system", system_prompts["therapist"], start_turn)
+        for role in ("patient", "therapist"):
+            self.session.record_prompt(
+                f"{role}_system", self._system_prompt(role, start_turn), start_turn
+            )
 
         for turn_num in range(start_turn, start_turn + n_turns):
             console.print(f"\n[dim]-- Turn {turn_num} --[/dim]")
@@ -202,6 +200,7 @@ class Dyad:
                 opening=opening,
                 history=history,
                 patient_turn=patient_text,
+                turn=turn_num,
             )
 
             therapist_prompt_sha = self.session.record_prompt(
@@ -218,6 +217,9 @@ class Dyad:
                 "therapist", turn_num, therapist_prompt_sha, therapist_messages,
                 therapist_response, time.perf_counter() - started,
             )
+            # The agenda step the therapist was given: its plan for this reply.
+            step = self.therapist_prior.agenda_step(turn_num)
+            therapist_diagnostics["agenda_step"] = step["id"] if step else None
             therapist_text_raw = therapist_response.content.strip()
             therapist_text = clean_utterance(therapist_text_raw)
 
@@ -244,6 +246,12 @@ class Dyad:
         console.rule("[bold]Session complete[/bold]")
         self.session.save_metadata()
         return self.session
+
+    def _system_prompt(self, role: str, turn: int) -> str:
+        """The system prompt `role` is sent on `turn`, rendered as the turn loop does."""
+        if role == "patient":
+            return self.patient_prior.build_system_prompt()
+        return self.therapist_prior.build_system_prompt(turn)
 
 
 def _print_turn(label: str, text: str, colour: str) -> None:

@@ -22,7 +22,7 @@ from dyadic_sim.generation.dyad import Dyad
 from dyadic_sim.generation.opening import FIRST_SESSION_OPENING
 from dyadic_sim.generation.priors.patient_prior import PatientPrior
 from dyadic_sim.generation.session import resume_session
-from dyadic_sim.generation.utterance import GENERATION_VERSION
+from dyadic_sim.generation.utterance import GENERATION_VERSION, PROMPT_VARIANT
 
 CASE = "no_complaint"
 OPENING = FIRST_SESSION_OPENING
@@ -124,6 +124,8 @@ def _write_record(directory, version, opening=OPENING):
     }
     if version is not None:  # absent means version 1
         meta["generation_version"] = version
+    if version == GENERATION_VERSION:
+        meta["prompt_variant"] = PROMPT_VARIANT
     (directory / "metadata.json").write_text(json.dumps(meta))
     row = {
         "turn": 1,
@@ -149,13 +151,14 @@ def test_both_agents_read_the_conversation_in_order_from_the_opening(sessions_di
     patient, therapist = _latest(agents, "patient"), _latest(agents, "therapist")
     assert [messages for _, messages in patient.requests] == EXPECTED_PATIENT
     assert [messages for _, messages in therapist.requests] == EXPECTED_THERAPIST
-    # The system prompt is the prior alone, the same on every turn.
+    # The patient's system prompt is its prior alone, the same on every turn;
+    # the therapist's adds the intake agenda step for that reply.
     assert {system for system, _ in patient.requests} == {
         dyad.patient_prior.build_system_prompt()
     }
-    assert {system for system, _ in therapist.requests} == {
-        dyad.therapist_prior.build_system_prompt()
-    }
+    assert [system for system, _ in therapist.requests] == [
+        dyad.therapist_prior.build_system_prompt(turn) for turn in (1, 2, 3)
+    ]
 
 
 def test_every_recorded_utterance_is_sent_once_in_the_order_spoken(sessions_dir, agents):
@@ -256,15 +259,16 @@ def test_saving_an_old_record_keeps_its_generation_version(sessions_dir):
     assert "generation_version" not in json.loads((unversioned / "metadata.json").read_text())
 
 
-def test_a_stub_session_writes_a_complete_v6_record(sessions_dir, agents):
+def test_a_stub_session_writes_a_complete_record(sessions_dir, agents):
     session = _dyad().run(n_turns=2)
 
     meta = json.loads((session.session_dir / "metadata.json").read_text())
     transcript = (session.session_dir / "transcript.jsonl").read_text().splitlines()
     rows = [json.loads(line) for line in transcript]
 
-    assert GENERATION_VERSION == 6
+    assert (GENERATION_VERSION, PROMPT_VARIANT) == (7, "7a")
     assert meta["generation_version"] == GENERATION_VERSION
+    assert meta["prompt_variant"] == PROMPT_VARIANT
     assert meta["turn_count"] == 2
     assert meta["initial_patient_prompt"] == OPENING
     assert [(r["turn"], r["patient_text"], r["therapist_text"]) for r in rows] == [

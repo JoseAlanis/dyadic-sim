@@ -35,7 +35,7 @@ from dyadic_sim.generation.session import (
     resume_session,
     sha256_text,
 )
-from dyadic_sim.generation.utterance import GENERATION_VERSION
+from dyadic_sim.generation.utterance import GENERATION_VERSION, PROMPT_VARIANT
 
 CASE = "no_complaint"
 SYSTEM = "You are a stub."
@@ -283,20 +283,27 @@ def test_each_completion_is_recorded_with_what_it_was_sent(sessions_dir, agents)
             assert record["output_tokens"] == 2
             assert record["observed"] == UNKNOWN
 
-    assert _meta(session.session_dir)["generation_version"] == GENERATION_VERSION == 6
+    meta = _meta(session.session_dir)
+    assert (meta["generation_version"], meta["prompt_variant"]) == (GENERATION_VERSION, PROMPT_VARIANT)
 
 
 def test_the_prompts_are_stored_as_text_with_their_hashes(sessions_dir, agents):
     session = _dyad().run(n_turns=2)
-    stored = {entry["role"]: entry for entry in _prompts(session.session_dir)}
+    entries = _prompts(session.session_dir)
+    by_role: dict[str, list[dict]] = {}
+    for entry in entries:
+        by_role.setdefault(entry["role"], []).append(entry)
 
-    assert set(stored) == {"opening", "patient_system", "therapist_system"}
-    assert stored["opening"]["text"] == FIRST_SESSION_OPENING
-    assert stored["patient_system"]["text"] == _latest(agents, "patient").requests[0][0]
-    assert stored["therapist_system"]["text"] == _latest(agents, "therapist").requests[0][0]
-    for entry in stored.values():
+    # One patient prompt; one therapist prompt per agenda step it was sent.
+    assert set(by_role) == {"opening", "patient_system", "therapist_system"}
+    assert [e["text"] for e in by_role["opening"]] == [FIRST_SESSION_OPENING]
+    assert [e["text"] for e in by_role["patient_system"]] == [
+        _latest(agents, "patient").requests[0][0]]
+    assert [e["text"] for e in by_role["therapist_system"]] == [
+        system for system, _ in _latest(agents, "therapist").requests]
+    assert [e["first_turn"] for e in by_role["therapist_system"]] == [1, 2]
+    for entry in entries:
         assert entry["sha256"] == sha256_text(entry["text"])
-        assert entry["first_turn"] == 1
     assert _meta(session.session_dir)["record_diagnostics"] == {
         "schema_version": 1,
         "since_turn": 1,
@@ -327,12 +334,13 @@ def test_unreported_usage_is_saved_as_unknown_not_zero(sessions_dir, monkeypatch
         assert row[f"{role}_tokens"] is None
 
 
-def _write_v6_record(directory):
-    """A one-turn v6 session as it was saved before diagnostics existed."""
+def _write_record_without_diagnostics(directory):
+    """A one-turn session of this generator, saved without diagnostics."""
     directory.mkdir()
     meta = {
         "metadata_schema_version": 2,
-        "generation_version": 6,
+        "generation_version": GENERATION_VERSION,
+        "prompt_variant": PROMPT_VARIANT,
         "session_id": directory.name,
         "patient_id": None,
         "therapist_model": "stub",
@@ -361,7 +369,7 @@ def _write_v6_record(directory):
 
 
 def test_turns_from_before_diagnostics_stay_unknown_after_resuming(sessions_dir, agents):
-    legacy = _write_v6_record(sessions_dir / "session_legacy")
+    legacy = _write_record_without_diagnostics(sessions_dir / "session_legacy")
     first_row = (legacy / "transcript.jsonl").read_text()
 
     _dyad(session_id="session_legacy").run(n_turns=1)
@@ -379,12 +387,14 @@ def test_turns_from_before_diagnostics_stay_unknown_after_resuming(sessions_dir,
 
 def test_resuming_never_rewrites_the_stored_prompts(sessions_dir, agents):
     session = _dyad().run(n_turns=1)
-    path = session.session_dir / PROMPTS_FILE
-    before = (path.read_bytes(), path.stat().st_mtime_ns)
+    before = _prompts(session.session_dir)
 
     _dyad(session_id=session.session_id).run(n_turns=1)
 
-    assert (path.read_bytes(), path.stat().st_mtime_ns) == before
+    after = _prompts(session.session_dir)
+    # Earlier entries stay as they were; only turn 2's new agenda step is added.
+    assert after[:len(before)] == before
+    assert [(e["role"], e["first_turn"]) for e in after[len(before):]] == [("therapist_system", 2)]
     assert _meta(session.session_dir)["record_diagnostics"]["since_turn"] == 1
 
 

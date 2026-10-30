@@ -28,7 +28,7 @@ from reportlab.platypus import (
     Spacer,
 )
 
-from dyadic_sim.generation.utterance import GENERATION_VERSION
+from dyadic_sim.generation.utterance import GENERATION_VERSION, PROMPT_VARIANT
 
 SESSIONS_DIR = Path("data/sessions")
 
@@ -213,6 +213,7 @@ class Session:
             generation_version: int | None = GENERATION_VERSION,
             patient_prompt_source: str | None = None,
             record_diagnostics: dict | None = None,
+            prompt_variant: str | None = PROMPT_VARIANT,
     ):
         self.session_id = session_id
         self.therapist_model = therapist_model
@@ -228,6 +229,11 @@ class Session:
         # one; a resumed session keeps what its metadata says (None = absent =
         # version 1), and saving never overwrites it.
         self.generation_version = generation_version
+        # The prompt revision within that version ("7a", ...); together they
+        # identify the prompts. Same rules as generation_version: a new session
+        # gets the current one, a resumed one keeps its own (None = absent,
+        # recorded before variants existed).
+        self.prompt_variant = prompt_variant
         # Where the patient prompt came from when it was not the case file named
         # by case_name (None). Read from the record; written only through
         # save_metadata(extra), so a caller's more specific label is kept.
@@ -515,6 +521,7 @@ class Session:
             # What the agents were told to produce and what was done to their
             # output; see dyadic_sim/generation/utterance.py. Absent means version 1.
             "generation_version": self.generation_version,
+            "prompt_variant": self.prompt_variant,
             "session_id": self.session_id,
             "patient_id": self.patient_id,
             "therapist_model": self.therapist_model,
@@ -533,6 +540,8 @@ class Session:
 
         if self.generation_version is None:
             del meta["generation_version"]  # keep an unversioned record unversioned
+        if self.prompt_variant is None:
+            del meta["prompt_variant"]
         merged = {**existing, **meta}
         if extra:
             merged.update(extra)
@@ -631,6 +640,7 @@ def resume_session(session_id: str) -> Session:
         generation_version=meta.get("generation_version"),
         patient_prompt_source=meta.get("patient_prompt_source"),
         record_diagnostics=meta.get("record_diagnostics"),
+        prompt_variant=meta.get("prompt_variant"),
     )
 
     # Replay transcript
@@ -676,6 +686,13 @@ def check_continuable(session: Session, prior_supplied: bool = False) -> None:
             f"this generator is version {GENERATION_VERSION} and cannot continue "
             "it. Start a new session instead."
         )
+    if session.prompt_variant != PROMPT_VARIANT:
+        raise IncompatibleSessionError(
+            f"{session.session_id} was generated with prompt variant "
+            f"{session.prompt_variant or '(none recorded)'}; this generator is "
+            f"{GENERATION_VERSION}/{PROMPT_VARIANT} and cannot continue it. Start a "
+            "new session instead."
+        )
     if not session.initial_patient_prompt:
         raise IncompatibleSessionError(
             f"{session.session_id} has no saved opening (initial_patient_prompt), "
@@ -701,12 +718,13 @@ def check_continuable(session: Session, prior_supplied: bool = False) -> None:
 
 
 
-def check_settings_unchanged(session: Session, settings: dict, system_prompts: dict) -> None:
+def check_settings_unchanged(session: Session, settings: dict, render) -> None:
     """Refuse to continue with other settings or prompts than the last turn used.
 
     `settings[role]` is what this run would send (model, max_tokens,
-    temperature) and `system_prompts[role]` the prompt it rendered, for "patient"
-    and "therapist". Both must equal what the session's last turn recorded:
+    temperature), for "patient" and "therapist", and `render(role, turn)` the
+    system prompt it would send that role on that turn (the therapist's changes
+    with the agenda step). Both must equal what the session's last turn recorded:
     otherwise one transcript would hold two stimuli under one label, as when an
     edited case file renders a different prompt without any version changing. A
     turn recorded without diagnostics, or a wrapper that did not report its
@@ -726,7 +744,7 @@ def check_settings_unchanged(session: Session, settings: dict, system_prompts: d
                 f"{session.session_id}: turn {last.turn} sent the {role} {requested}; "
                 f"this run would send {settings[role]}. Continue it with the same settings."
             )
-        if recorded.get("system_prompt_sha256") != sha256_text(system_prompts[role]):
+        if recorded.get("system_prompt_sha256") != sha256_text(render(role, last.turn)):
             raise IncompatibleSessionError(
                 f"{session.session_id}: the {role} prompt now renders differently from "
                 f"the one turn {last.turn} was sent (an edited case or prior file?), "

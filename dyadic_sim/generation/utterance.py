@@ -83,7 +83,23 @@ _BLANK_LINES = re.compile(r"\n{3,}")
 #     from the saved opening (dyadic_sim/generation/turn_manager.py);
 #   - every recorded turn passes through clean_utterance(); the original text
 #     is kept in `*_text_raw` when cleaning changed it.
-GENERATION_VERSION = 6
+#
+# Version 7, as version 6 except:
+#   - the therapist runs a first-appointment intake: an intake role and stance
+#     (therapist base.yaml, cbt variant without treatment techniques) and, per
+#     reply, one step of base.yaml's `intake_agenda`, so its system prompt
+#     changes with the turn;
+#   - the patient prompt has a frame without a presumed problem, symptom facts
+#     with a disclosure rule (config/priors/patient/symptom_facts.yaml),
+#     symptoms the batch declares absent, a rule against inventing problems, and
+#     plain-speech instructions.
+#
+# A prompt's identity is (GENERATION_VERSION, PROMPT_VARIANT). Every change to
+# prompt text gets a new, immutable PROMPT_VARIANT ("7a", "7b", ...), never
+# reused; a change to the generation mechanics gets a new GENERATION_VERSION.
+# Both are recorded on every session and both must match to continue one.
+GENERATION_VERSION = 7
+PROMPT_VARIANT = "7a"
 
 # Shared by both priors so the therapist and the patient are held to the same
 # rule. Phrased concretely, with examples, because an abstract instruction not
@@ -95,8 +111,7 @@ SPEECH_ONLY_INSTRUCTION = (
     "Do not use parentheses, brackets, or asterisks for actions. "
     "For example, never write \"(pauses)\" or \"*leans forward*\". "
     "Do not prefix your reply with a name or role label, and do not wrap your "
-    "reply in quotation marks. Write the words plainly, as they were said. "
-    "If you would pause, simply let the words carry it."
+    "reply in quotation marks. Write the words plainly, as they were said."
 )
 
 
@@ -115,26 +130,30 @@ SPEECH_ONLY_INSTRUCTION = (
 #     abstract, and the concrete instruction is here because the abstract one
 #     is not followed reliably.
 #
+# Since version 7 the intake agenda raises the areas of life itself, so the
+# rule allows neutral questions about them and forbids only suggesting a
+# problem; "follow what they bring rather than introducing topics" would
+# contradict the agenda.
+#
 # Phrased as clinical practice rather than methodology, so it reads as part of
 # the therapist's stance rather than an experimental control.
 STAY_WITH_WHAT_IS_SAID = (
     "Work only from what this person has actually told you. Do not state as "
     "fact anything they have not said, and do not fill in details of their "
     "history or their feelings on their behalf. If you have a hunch, hold it, "
-    "or ask about it openly instead of asserting it. Follow what they bring "
-    "rather than introducing topics of your own. Early on especially, ask more "
-    "than you interpret: an open question that lets them choose what comes next "
-    "is worth more than a specific one that hands them the answer. "
+    "or ask about it openly instead of asserting it. You may raise each area of "
+    "today's agenda with a brief, neutral question; never suggest that they "
+    "have a problem they have not described. Ask more than you interpret: an "
+    "open question that lets them choose what comes next is worth more than a "
+    "specific one that hands them the answer. "
     "Match the strength of what they said rather than raising it. If they call "
     "something a bit difficult, it is a bit difficult, not devastating; reflect "
     "it back at their intensity, in their words where you can. "
     "Do not supply emotion words they have not used: if they say annoyed, work "
     "with annoyed, not frustrated, hurt, or trapped; if they describe a thing, "
     "do not turn it into a feeling for them. "
-    "If they tell you nothing is wrong, take that as their answer, not as a "
-    "puzzle. You may ask one open question about how things are; if the answer "
-    "is still that things are fine, believe it and let the hour be about "
-    "whatever they do bring, however ordinary. "
+    "If they tell you nothing is wrong, or that an area is fine, take that as "
+    "their answer, not as a puzzle: accept it, do not press, and go on. "
     "Do not talk about your own life or work. If they ask about you, answer in "
     "a few words at most and return to them; the hour is theirs."
 )

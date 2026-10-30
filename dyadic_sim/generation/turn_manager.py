@@ -35,6 +35,7 @@ def build_therapist_context(
     opening: str,
     history: list[tuple[str, str]],   # list of (patient_text, therapist_text)
     patient_turn: str,
+    turn: int | None = None,
 ) -> tuple[str, list[Message]]:
     """
     Build system prompt + message list for a therapist turn.
@@ -44,12 +45,14 @@ def build_therapist_context(
         opening:       The therapist's opening line, as saved with the session
         history:       Completed (patient, therapist) turn pairs
         patient_turn:  What the patient just said, which the therapist answers
+        turn:          The reply being written (k answers the patient's k-th
+                       turn); selects the intake agenda step
 
     Returns:
         (system_prompt, messages) ready to pass to agent.complete()
     """
     utterances = _conversation(opening, history) + [(PATIENT, patient_turn)]
-    return prior.build_system_prompt(), _as_messages(utterances, own=THERAPIST)
+    return prior.build_system_prompt(turn), _as_messages(utterances, own=THERAPIST)
 
 
 def build_patient_context(

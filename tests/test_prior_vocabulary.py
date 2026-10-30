@@ -122,7 +122,7 @@ def test_ref_c_extends_the_real_prompt_labels():
 def test_patient_prior_renders_the_canonical_labels():
     """The labels are 'what the patient saw', so the prompt must use these."""
     source = inspect.getsource(patient_prior)
-    assert "symptom_labels = PHQ_SYMPTOM_LABELS" in source, (
+    assert "PHQ_SYMPTOM_LABELS.get(" in source, (
         "patient_prior must import the labels, not redeclare them"
     )
     for label in PHQ_SYMPTOM_LABELS.values():

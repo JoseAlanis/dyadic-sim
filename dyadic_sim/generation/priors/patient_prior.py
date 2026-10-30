@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass, field
 
-from dyadic_sim.generation.priors.loader import load_patient_case
+from dyadic_sim.generation.priors.loader import load_patient_case, load_symptom_facts
 from dyadic_sim.generation.utterance import SPEECH_ONLY_INSTRUCTION
 from dyadic_sim.scoring.config import PHQ_SYMPTOM_LABELS
 
@@ -62,10 +62,10 @@ class PatientPrior:
 
         sections.append(
             "## Who You Are in This Encounter\n"
-            "You are a person in a therapy session. You are not performing "
-            "being a patient, you are one. You have come because something "
-            "is wrong and you don't fully understand it. Speak from inside "
-            "your experience, not from above it."
+            "You are a person at a first appointment with a therapist. You are "
+            "not performing being a patient; you are yourself. Below, in your "
+            "own words, is why you came and how things are for you. Speak from "
+            "inside your life, not from above it."
         )
 
         sections.append(
@@ -92,20 +92,24 @@ class PatientPrior:
 
         if self.symptoms.strip():
             sections.append(
-                "## How You've Been Lately\n"
-                "Over the past two weeks, this is how much problems in the "
-                "following areas have bothered or impaired you. This is simply "
-                "how things have been for you. Some areas may have been fine, "
-                "others harder.\n\n"
+                "## Your Health Lately\n"
+                "These are facts about you. Bring them in only as described, in "
+                "your own words, never as a list.\n\n"
                 + self.symptoms.strip()
+                + "\n\nApart from what is described here, you have no health or "
+                "emotional problems. Do not invent problems, causes or details. "
+                "If you are asked about a detail this does not cover, say you "
+                "don't know or keep it brief."
             )
 
         sections.append(
             "## How to Respond\n"
-            "Speak as this person speaks, in their register, their rhythm. "
-            "You are not trying to be a good patient. You are trying to get "
-            "something, avoid something, or understand something. "
-            "One to five sentences. Raw, not polished.\n\n"
+            "Talk the way people talk at a first appointment: everyday words, "
+            "plain and direct. Answer what you were asked, usually in one to four "
+            "sentences. Figures of speech and quoting your own thoughts are rare "
+            "in ordinary talk; use them seldom. Don't ask rhetorical questions, "
+            "and don't repeat what you have already said. It is fine to say you "
+            "don't know.\n\n"
             + SPEECH_ONLY_INSTRUCTION
         )
 
@@ -335,48 +339,42 @@ class PatientPrior:
         return False
 
 
-def _format_symptoms(symptoms_raw) -> str:
-    if not symptoms_raw:
+def _format_symptoms(symptoms_raw, absent=()) -> str:
+    """The lines of the "Your Health Lately" section.
+
+    `symptoms_raw` maps a symptom key to its PHQ-9 frequency anchor; "not at
+    all" means absent, like every key in `absent`. A present symptom gets its
+    facts and disclosure rule from symptom_facts.yaml; an absent one, its absent
+    line. Text that is not a mapping is used as written.
+    """
+    if symptoms_raw and not isinstance(symptoms_raw, dict):
+        return str(symptoms_raw).strip()
+    levels = dict(symptoms_raw or {})
+    for key in absent:
+        levels.setdefault(key, "not at all")
+    if not levels:
         return ""
 
-    frequency_meanings = {
-        "not at all": (
-            "over the last two weeks, you have not been bothered by this symptom; "
-        ),
-        "several days": (
-            "over the last two weeks, you have been bothered by this symptom on several days; "
-        ),
-        "more than half the days": (
-            "over the last two weeks, you have been bothered by this symptom more than half the days; "
-        ),
-        "nearly every day": (
-            "over the last two weeks, you have been bothered by this symptom nearly every day; "
-        ),
-    }
+    facts = load_symptom_facts()
+    default = facts["default"]
+    lines = []
+    for key, value in levels.items():
+        frequency = str(value).strip().lower()
+        own = facts["symptoms"].get(key, {})
+        label = PHQ_SYMPTOM_LABELS.get(key, key.replace("_", " ").strip().capitalize())
+        if frequency == "not at all":
+            template = own.get("absent", default["absent"])
+            lines.append("- " + template.format(label=label))
+            continue
+        how_often = own.get("how_often", default["how_often"]).get(frequency)
+        if how_often is None:
+            raise ValueError(f"Unknown frequency {value!r} for symptom {key!r}")
+        text = own.get("present", default["present"]).format(label=label, how_often=how_often)
+        topic = own.get("topic", label.lower())
+        text += " " + facts["disclosure"]["when_asked"].format(topic=topic)
+        lines.append("- " + " ".join(text.split()))
+    return "\n".join(lines)
 
-    # Imported, not redeclared: these strings go into the prompt and are the
-    # same ones the analysis compares reference wordings against.
-    symptom_labels = PHQ_SYMPTOM_LABELS
-
-    if isinstance(symptoms_raw, dict):
-        lines = []
-        for key, value in symptoms_raw.items():
-            frequency = str(value).strip().lower()
-
-            label = symptom_labels.get(
-                key,
-                key.replace("_", " ").strip().capitalize()
-            )
-
-            meaning = frequency_meanings.get(
-                frequency,
-                "frequency level not recognized; use common sense to decide how much it should affect you"
-            )
-
-            lines.append(f"- {label}: {frequency}; {meaning}")
-
-        return "\n".join(lines)
-    return str(symptoms_raw).strip()
 
 def build_patient_prior(case_name: str) -> PatientPrior:
     """
@@ -404,6 +402,6 @@ def build_patient_prior(case_name: str) -> PatientPrior:
         relational_pattern=raw.get("relational_pattern", ""),
         transference_expectation=raw.get("transference_expectation", ""),
         resistance_structure=raw.get("resistance_structure", ""),
-        symptoms=_format_symptoms(symptoms_raw),
+        symptoms=_format_symptoms(symptoms_raw, raw.get("symptoms_absent", ())),
         symptom_levels=symptom_levels,
     )
